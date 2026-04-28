@@ -1,0 +1,45 @@
+package com.sdjzu.carrental.controller;
+
+import com.sdjzu.carrental.common.ApiResponse;
+import com.sdjzu.carrental.model.entity.ReturnOrder;
+import com.sdjzu.carrental.model.request.ReturnConfirmRequest;
+import com.sdjzu.carrental.model.request.ReturnOrderRequest;
+import com.sdjzu.carrental.service.ReturnOrderService;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/return-orders")
+public class ReturnOrderController {
+
+    private final ReturnOrderService returnOrderService;
+
+    public ReturnOrderController(ReturnOrderService returnOrderService) {
+        this.returnOrderService = returnOrderService;
+    }
+
+    @PostMapping
+    public ApiResponse<Void> create(@Valid @RequestBody ReturnOrderRequest request) {
+        returnOrderService.create(request);
+        return ApiResponse.success("还车申请提交成功", null);
+    }
+
+    @GetMapping
+    public ApiResponse<List<ReturnOrder>> list() {
+        return ApiResponse.success(returnOrderService.list());
+    }
+
+    @PutMapping("/{id}/confirm")
+    public ApiResponse<Void> confirm(@PathVariable Long id, @Valid @RequestBody ReturnConfirmRequest request) {
+        returnOrderService.confirm(id, request);
+        return ApiResponse.success("还车确认成功", null);
+    }
+}

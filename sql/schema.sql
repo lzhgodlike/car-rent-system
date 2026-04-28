@@ -1,0 +1,90 @@
+DROP DATABASE IF EXISTS car_rental_system;
+CREATE DATABASE car_rental_system DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+USE car_rental_system;
+
+DROP TABLE IF EXISTS sys_user;
+CREATE TABLE sys_user (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(100) NOT NULL,
+    real_name VARCHAR(50) NOT NULL,
+    phone VARCHAR(20),
+    id_card VARCHAR(30),
+    gender VARCHAR(10),
+    role VARCHAR(20) NOT NULL DEFAULT 'USER',
+    status TINYINT NOT NULL DEFAULT 1,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+DROP TABLE IF EXISTS car_type;
+CREATE TABLE car_type (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    type_name VARCHAR(50) NOT NULL,
+    description VARCHAR(255),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+DROP TABLE IF EXISTS car_info;
+CREATE TABLE car_info (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    car_no VARCHAR(50) NOT NULL UNIQUE,
+    type_id BIGINT NOT NULL,
+    brand VARCHAR(50) NOT NULL,
+    model VARCHAR(100) NOT NULL,
+    plate_number VARCHAR(30) NOT NULL UNIQUE,
+    day_price DECIMAL(10,2) NOT NULL,
+    mileage INT NOT NULL DEFAULT 0,
+    pickup_address VARCHAR(255),
+    car_image VARCHAR(255),
+    status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+DROP TABLE IF EXISTS rent_order;
+CREATE TABLE rent_order (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    order_no VARCHAR(50) NOT NULL UNIQUE,
+    user_id BIGINT NOT NULL,
+    car_id BIGINT NOT NULL,
+    rent_date DATE NOT NULL,
+    expected_return_date DATE NOT NULL,
+    actual_return_date DATE,
+    rent_days INT NOT NULL,
+    unit_price DECIMAL(10,2) NOT NULL,
+    total_price DECIMAL(10,2) NOT NULL,
+    order_status VARCHAR(20) NOT NULL DEFAULT 'RENTED',
+    remark VARCHAR(255),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+DROP TABLE IF EXISTS return_order;
+CREATE TABLE return_order (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    rent_order_id BIGINT NOT NULL UNIQUE,
+    actual_return_time DATETIME NOT NULL,
+    actual_mileage INT NOT NULL,
+    damage_desc VARCHAR(255),
+    extra_fee DECIMAL(10,2) DEFAULT 0.00,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    operator_id BIGINT,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+DROP TABLE IF EXISTS fault_report;
+CREATE TABLE fault_report (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    car_id BIGINT NOT NULL,
+    fault_content VARCHAR(255) NOT NULL,
+    fault_status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    handle_result VARCHAR(255),
+    report_time DATETIME NOT NULL,
+    handle_time DATETIME,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
