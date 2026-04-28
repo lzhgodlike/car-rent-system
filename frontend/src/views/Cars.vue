@@ -34,7 +34,7 @@ const imagePattern = /^(|https?:\/\/.+)$/
 
 const statusMap = {
   AVAILABLE: '空闲可租',
-  RENTED: '正在出行',
+  RENTED: '已出租',
   MAINTENANCE: '检修中',
 }
 
@@ -232,7 +232,7 @@ onMounted(async () => {
         </el-select>
         <el-select v-model="query.status" placeholder="车辆状态" style="width: 180px" clearable>
           <el-option label="空闲可租" value="AVAILABLE" />
-          <el-option label="正在出行" value="RENTED" />
+          <el-option label="已出租" value="RENTED" />
           <el-option label="检修中" value="MAINTENANCE" />
         </el-select>
         <el-button type="primary" plain @click="loadCars">查询</el-button>
@@ -305,7 +305,7 @@ onMounted(async () => {
         <el-form-item label="状态">
           <el-select v-model="form.status" style="width: 100%">
             <el-option label="空闲可租" value="AVAILABLE" />
-            <el-option label="正在出行" value="RENTED" />
+            <el-option label="已出租" value="RENTED" />
             <el-option label="检修中" value="MAINTENANCE" />
           </el-select>
         </el-form-item>
