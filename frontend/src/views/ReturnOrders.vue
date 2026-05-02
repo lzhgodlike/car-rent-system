@@ -13,6 +13,7 @@ const createForm = reactive({ rentOrderId: null, actualMileage: 0, damageDesc: '
 const confirmDialog = ref(false)
 const currentId = ref(null)
 const confirmForm = reactive({ extraFee: 0 })
+const loading = ref(false)
 
 const returnStatusMap = {
   PENDING: '待确认',
@@ -29,14 +30,19 @@ const formatReturnStatus = (status) => returnStatusMap[status] || status || '-'
 const statusTone = (status) => (status === 'PENDING' ? 'warning' : 'success')
 
 const loadData = async () => {
-  const [recordData, rentData, carData] = await Promise.all([
-    request.get('/return-orders'),
-    request.get('/rent-orders'),
-    request.get('/cars'),
-  ])
-  records.value = recordData
-  rentOrders.value = rentData
-  cars.value = carData
+  loading.value = true
+  try {
+    const [recordData, rentData, carData] = await Promise.all([
+      request.get('/return-orders'),
+      request.get('/rent-orders'),
+      request.get('/cars'),
+    ])
+    records.value = recordData
+    rentOrders.value = rentData
+    cars.value = carData
+  } finally {
+    loading.value = false
+  }
 }
 
 const rentOrderMap = computed(() => {
@@ -64,6 +70,47 @@ const formatCarNoByRent = (rentOrderId) => {
   }
   return formatCarNo(order.carId)
 }
+
+const formatCarNameByRent = (rentOrderId) => {
+  const order = rentOrderMap.value.get(rentOrderId)
+  if (!order) return '-'
+  const car = cars.value.find((c) => c.id === order.carId)
+  if (!car) return '-'
+  return `${car.brand || ''} ${car.model || ''}`.trim() || '-'
+}
+
+const formatPlateByRent = (rentOrderId) => {
+  const order = rentOrderMap.value.get(rentOrderId)
+  if (!order) return '-'
+  const car = cars.value.find((c) => c.id === order.carId)
+  return car?.plateNumber || '-'
+}
+
+const formatRentPeriod = (rentOrderId) => {
+  const order = rentOrderMap.value.get(rentOrderId)
+  if (!order) return '-'
+  return `${order.rentDate || ''} 至 ${order.expectedReturnDate || ''}`
+}
+
+const formatRentDays = (rentOrderId) => {
+  const order = rentOrderMap.value.get(rentOrderId)
+  return order?.rentDays || '-'
+}
+
+const currentReturnOrder = computed(() => {
+  if (!currentId.value) return null
+  return records.value.find((r) => r.id === currentId.value) || null
+})
+
+const currentReturnRent = computed(() => {
+  if (!currentReturnOrder.value) return null
+  return rentOrderMap.value.get(currentReturnOrder.value.rentOrderId) || null
+})
+
+const currentReturnCar = computed(() => {
+  if (!currentReturnRent.value) return null
+  return cars.value.find((c) => c.id === currentReturnRent.value.carId) || null
+})
 
 const availableRentOrders = computed(() => {
   const appliedIds = new Set(records.value.map((item) => item.rentOrderId))
@@ -107,21 +154,7 @@ onMounted(loadData)
       </div>
     </section>
 
-    <div class="page-card">
-      <!-- <div class="page-header compact-page-head">
-        <div>
-          <h2 class="page-title">还车信息管理</h2>
-          <p class="page-desc">用户提交还车申请，管理员确认还车并录入附加费用。</p>
-        </div>
-      </div>
-
-      <div class="summary-grid">
-        <div class="summary-card"><span>记录总数</span><strong>{{ records.length }}</strong></div>
-        <div class="summary-card"><span>待确认</span><strong>{{ pendingCount }}</strong></div>
-        <div class="summary-card"><span>已确认</span><strong>{{ confirmedCount }}</strong></div>
-        <div class="summary-card"><span>附加费用合计</span><strong>￥{{ extraFeeTotal }}</strong></div>
-      </div> -->
-
+    <div class="page-card" v-loading="loading">
       <div v-if="!isAdmin" class="section-card">
         <div class="section-head">
           <div>
@@ -151,56 +184,100 @@ onMounted(loadData)
         <div v-if="availableRentOrders.length === 0" class="soft-note">当前没有可申请还车的租车订单。</div>
       </div>
 
-      <!-- <div class="section-card"> -->
-        <!-- <div class="section-head">
-          <div>
-            <h3>还车记录列表</h3>
-            <p>支持核对租车订单、车辆编号、还车公里数和确认状态。</p>
-          </div>
-        </div> -->
-
         <div class="table-shell">
           <el-table :data="records" stripe>
-            <el-table-column prop="rentOrderId" label="租车订单ID" width="120" />
-            <el-table-column label="车辆编号" width="140">
+            <el-table-column label="车辆" min-width="180">
               <template #default="scope">
-                {{ formatCarNoByRent(scope.row.rentOrderId) }}
+                <div>{{ formatCarNameByRent(scope.row.rentOrderId) }}</div>
+                <div style="font-size:12px;color:var(--subtext)">{{ formatPlateByRent(scope.row.rentOrderId) }}</div>
               </template>
             </el-table-column>
-            <el-table-column prop="actualReturnTime" label="申请时间" width="180" />
-            <el-table-column prop="actualMileage" label="还车公里数" width="120" />
-            <el-table-column prop="damageDesc" label="损坏说明" />
-            <el-table-column label="附加费用" width="120">
+            <el-table-column label="原租期" min-width="200">
+              <template #default="scope">
+                <div>{{ formatRentPeriod(scope.row.rentOrderId) }}</div>
+                <div style="font-size:12px;color:var(--subtext)">共 {{ formatRentDays(scope.row.rentOrderId) }} 天</div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="actualReturnTime" label="还车时间" width="170" />
+            <el-table-column prop="actualMileage" label="还车公里数" width="110" />
+            <el-table-column prop="damageDesc" label="损坏说明" min-width="140">
+              <template #default="scope">
+                {{ scope.row.damageDesc || '无' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="附加费用" width="110">
               <template #default="scope">
                 ￥{{ scope.row.extraFee || 0 }}
               </template>
             </el-table-column>
-            <el-table-column label="状态" width="120">
+            <el-table-column label="状态" width="110">
               <template #default="scope">
                 <span class="status-badge" :class="statusTone(scope.row.status)">
                   {{ formatReturnStatus(scope.row.status) }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column v-if="isAdmin" label="操作" width="130">
+            <el-table-column v-if="isAdmin" label="操作" width="120">
               <template #default="scope">
                 <el-button v-if="scope.row.status === 'PENDING'" size="small" type="primary" @click="openConfirm(scope.row)">确认还车</el-button>
               </template>
             </el-table-column>
           </el-table>
         </div>
-      <!-- </div> -->
 
-      <el-dialog v-model="confirmDialog" title="确认还车" width="420px">
-        <el-form label-width="90px">
+      <el-dialog v-model="confirmDialog" title="确认还车" width="520px">
+        <div v-if="currentReturnOrder" class="confirm-info">
+          <div class="confirm-info-row">
+            <span>车辆</span>
+            <strong>{{ currentReturnCar ? `${currentReturnCar.brand} ${currentReturnCar.model} (${currentReturnCar.plateNumber})` : '-' }}</strong>
+          </div>
+          <div class="confirm-info-row">
+            <span>还车公里数</span>
+            <strong>{{ currentReturnOrder.actualMileage }} km</strong>
+          </div>
+          <div class="confirm-info-row">
+            <span>损坏说明</span>
+            <strong>{{ currentReturnOrder.damageDesc || '无' }}</strong>
+          </div>
+          <div class="confirm-info-row" v-if="currentReturnRent">
+            <span>原订单租金</span>
+            <strong>￥{{ currentReturnRent.totalPrice || 0 }}</strong>
+          </div>
+        </div>
+        <el-form label-width="90px" style="margin-top:16px">
           <el-form-item label="附加费用"><el-input-number v-model="confirmForm.extraFee" :min="0" style="width: 100%" /></el-form-item>
         </el-form>
         <template #footer>
           <el-button @click="confirmDialog = false">取消</el-button>
-          <el-button type="primary" @click="doConfirm">确认</el-button>
+          <el-button type="primary" @click="doConfirm">确认还车</el-button>
         </template>
       </el-dialog>
     </div>
   </div>
 </template>
+
+<style scoped>
+.confirm-info {
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(191, 108, 47, 0.06);
+  display: grid;
+  gap: 12px;
+}
+
+.confirm-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.confirm-info-row span {
+  font-size: 13px;
+  color: var(--subtext);
+}
+
+.confirm-info-row strong {
+  font-size: 14px;
+}
+</style>
 

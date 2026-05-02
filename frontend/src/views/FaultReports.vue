@@ -12,6 +12,19 @@ const form = reactive({ carId: null, faultContent: '' })
 const dialogVisible = ref(false)
 const handleForm = reactive({ handleResult: '' })
 const currentId = ref(null)
+const loading = ref(false)
+
+const currentPage = ref(1)
+const pageSize = ref(10)
+const paginatedRecords = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return records.value.slice(start, start + pageSize.value)
+})
+const handlePageChange = (page) => { currentPage.value = page }
+const handleSizeChange = (size) => { pageSize.value = size; currentPage.value = 1 }
+
+const handleConfirmVisible = ref(false)
+const pendingRow = ref(null)
 
 const faultStatusMap = {
   PENDING: '待处理',
@@ -31,9 +44,14 @@ const statusTone = (status) => {
 }
 
 const loadData = async () => {
-  const [recordData, carData] = await Promise.all([request.get('/fault-reports'), request.get('/cars')])
-  records.value = recordData
-  cars.value = carData
+  loading.value = true
+  try {
+    const [recordData, carData] = await Promise.all([request.get('/fault-reports'), request.get('/cars')])
+    records.value = recordData
+    cars.value = carData
+  } finally {
+    loading.value = false
+  }
 }
 
 const carNoMap = computed(() => {
@@ -46,6 +64,24 @@ const carNoMap = computed(() => {
 
 const formatCarNo = (carId) => carNoMap.value.get(carId) || carId || '-'
 
+const carStatusMap = { AVAILABLE: '空闲可租', RENTED: '已出租', MAINTENANCE: '检修中' }
+const carStatusTone = { AVAILABLE: 'success', RENTED: 'warning', MAINTENANCE: 'danger' }
+
+const getCar = (carId) => cars.value.find((c) => c.id === carId) || null
+const formatCarName = (carId) => {
+  const car = getCar(carId)
+  if (!car) return '-'
+  return `${car.brand || ''} ${car.model || ''}`.trim() || '-'
+}
+const formatCarStatus = (carId) => {
+  const car = getCar(carId)
+  return carStatusMap[car?.status] || '-'
+}
+const formatCarStatusTone = (carId) => {
+  const car = getCar(carId)
+  return carStatusTone[car?.status] || 'neutral'
+}
+
 const submitFault = async () => {
   await request.post('/fault-reports', form)
   ElMessage.success('故障已上报')
@@ -53,9 +89,16 @@ const submitFault = async () => {
   loadData()
 }
 
-const handleFault = async (row) => {
-  await request.put(`/fault-reports/${row.id}/handle`, { handleResult: '已安排维修' })
+const openHandleConfirm = (row) => {
+  pendingRow.value = row
+  handleConfirmVisible.value = true
+}
+
+const doHandleFault = async () => {
+  await request.put(`/fault-reports/${pendingRow.value.id}/handle`, { handleResult: '已安排维修' })
   ElMessage.success('车辆已进入维修状态')
+  handleConfirmVisible.value = false
+  pendingRow.value = null
   loadData()
 }
 
@@ -90,21 +133,7 @@ onMounted(loadData)
       </div>
     </section>
 
-    <div class="page-card">
-      <!-- <div class="page-header compact-page-head">
-        <div>
-          <h2 class="page-title">故障上报管理</h2>
-          <p class="page-desc">用户负责上报问题，管理员处理故障后可将车辆设置为维修中，维修完成后恢复为空闲状态。</p>
-        </div>
-      </div>
-
-      <div class="summary-grid">
-        <div class="summary-card"><span>工单总数</span><strong>{{ records.length }}</strong></div>
-        <div class="summary-card"><span>待处理</span><strong>{{ pendingCount }}</strong></div>
-        <div class="summary-card"><span>维修中</span><strong>{{ repairingCount }}</strong></div>
-        <div class="summary-card"><span>已修复</span><strong>{{ resolvedCount }}</strong></div>
-      </div> -->
-
+    <div class="page-card" v-loading="loading">
       <div class="section-card">
         <div class="section-head">
           <div>
@@ -139,32 +168,55 @@ onMounted(loadData)
         </div>
 
         <div class="table-shell">
-          <el-table :data="records" stripe>
-            <el-table-column prop="userId" label="用户ID" width="100" />
-            <el-table-column label="车辆编号" width="140">
+          <el-table :data="paginatedRecords" stripe>
+            <el-table-column label="车辆" min-width="180">
               <template #default="scope">
-                {{ formatCarNo(scope.row.carId) }}
+                <div>{{ formatCarName(scope.row.carId) }}</div>
+                <div style="font-size:12px;color:var(--subtext)">{{ formatCarNo(scope.row.carId) }}</div>
               </template>
             </el-table-column>
-            <el-table-column prop="faultContent" label="故障内容" />
-            <el-table-column label="状态" width="120">
+            <el-table-column label="车辆状态" width="110">
+              <template #default="scope">
+                <span class="status-badge" :class="formatCarStatusTone(scope.row.carId)">
+                  {{ formatCarStatus(scope.row.carId) }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="faultContent" label="故障内容" min-width="160" />
+            <el-table-column label="工单状态" width="110">
               <template #default="scope">
                 <span class="status-badge" :class="statusTone(scope.row.faultStatus)">
                   {{ formatFaultStatus(scope.row.faultStatus) }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column prop="reportTime" label="上报时间" width="180" />
-            <el-table-column prop="handleResult" label="处理结果" />
-            <el-table-column v-if="isAdmin" label="操作" width="220">
+            <el-table-column prop="reportTime" label="上报时间" width="170" />
+            <el-table-column prop="handleResult" label="处理结果" min-width="130">
+              <template #default="scope">
+                {{ scope.row.handleResult || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column v-if="isAdmin" label="操作" width="200">
               <template #default="scope">
                 <div class="table-actions">
-                  <el-button v-if="scope.row.faultStatus === 'PENDING'" size="small" type="primary" @click="handleFault(scope.row)">处理</el-button>
+                  <el-button v-if="scope.row.faultStatus === 'PENDING'" size="small" type="primary" @click="openHandleConfirm(scope.row)">处理</el-button>
                   <el-button v-if="scope.row.faultStatus === 'REPAIRING'" size="small" type="success" @click="openCompleteRepair(scope.row)">完成维修</el-button>
                 </div>
               </template>
             </el-table-column>
           </el-table>
+        </div>
+
+        <div v-if="records.length > pageSize" class="pagination-wrap">
+          <el-pagination
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
+            :total="records.length"
+            :page-sizes="[10, 20, 50]"
+            layout="total, sizes, prev, pager, next"
+            @current-change="handlePageChange"
+            @size-change="handleSizeChange"
+          />
         </div>
       </div>
 
@@ -177,7 +229,60 @@ onMounted(loadData)
           <el-button type="primary" @click="completeRepair">确认完成</el-button>
         </template>
       </el-dialog>
+
+      <el-dialog v-model="handleConfirmVisible" title="确认处理" width="440px">
+        <div v-if="pendingRow" class="handle-confirm-info">
+          <div class="handle-confirm-row">
+            <span>车辆</span>
+            <strong>{{ formatCarName(pendingRow.carId) }} ({{ formatCarNo(pendingRow.carId) }})</strong>
+          </div>
+          <div class="handle-confirm-row">
+            <span>故障内容</span>
+            <strong>{{ pendingRow.faultContent }}</strong>
+          </div>
+        </div>
+        <p style="margin:16px 0 0;color:var(--subtext);font-size:13px">确认后车辆将变为"检修中"状态，无法出租。</p>
+        <template #footer>
+          <el-button @click="handleConfirmVisible = false">取消</el-button>
+          <el-button type="primary" @click="doHandleFault">确认处理</el-button>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
+
+<style scoped>
+.pagination-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.handle-confirm-info {
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(191, 108, 47, 0.06);
+  display: grid;
+  gap: 12px;
+}
+
+.handle-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.handle-confirm-row span {
+  font-size: 13px;
+  color: var(--subtext);
+  white-space: nowrap;
+}
+
+.handle-confirm-row strong {
+  font-size: 14px;
+  text-align: right;
+  word-break: break-word;
+}
+</style>
 

@@ -10,10 +10,20 @@ const isAdmin = computed(() => auth?.userInfo?.role === 'ADMIN')
 const orders = ref([])
 const cars = ref([])
 const returnOrders = ref([])
+const loading = ref(false)
 
 const detailVisible = ref(false)
 const returnVisible = ref(false)
 const currentOrder = ref(null)
+
+const currentPage = ref(1)
+const pageSize = ref(10)
+const paginatedOrders = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return orders.value.slice(start, start + pageSize.value)
+})
+const handlePageChange = (page) => { currentPage.value = page }
+const handleSizeChange = (size) => { pageSize.value = size; currentPage.value = 1 }
 
 const returnForm = reactive({
   rentOrderId: null,
@@ -71,14 +81,44 @@ const formatCarImage = (carId) => getCar(carId)?.carImage || placeholderImage
 const hasReturnRequest = (orderId) => submittedReturnIds.value.has(orderId)
 
 const loadData = async () => {
-  const [orderData, carData, returnData] = await Promise.all([
-    request.get('/rent-orders'),
-    request.get('/cars'),
-    request.get('/return-orders'),
-  ])
-  orders.value = orderData
-  cars.value = carData
-  returnOrders.value = returnData
+  loading.value = true
+  try {
+    const [orderData, carData, returnData] = await Promise.all([
+      request.get('/rent-orders'),
+      request.get('/cars'),
+      request.get('/return-orders'),
+    ])
+    orders.value = orderData
+    cars.value = carData
+    returnOrders.value = returnData
+  } finally {
+    loading.value = false
+  }
+}
+
+const exportCSV = () => {
+  const header = ['订单编号', '用户ID', '车辆名称', '车牌号', '租车日期', '预计还车', '天数', '总租金', '状态']
+  const rows = orders.value.map((o) => [
+    o.orderNo || '',
+    o.userId || '',
+    formatCarName(o.carId),
+    formatPlateNumber(o.carId),
+    o.rentDate || '',
+    o.expectedReturnDate || '',
+    o.rentDays || 0,
+    o.totalPrice || 0,
+    formatOrderStatus(o.orderStatus),
+  ].map((v) => {
+    const s = String(v ?? '')
+    return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
+  }))
+  const csv = [header, ...rows].map((r) => r.join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `租车订单_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
 }
 
 const openDetail = (row) => {
@@ -90,9 +130,14 @@ const closeDetail = () => {
   detailVisible.value = false
 }
 
+const currentReturnCar = computed(() => {
+  if (!currentOrder.value) return null
+  return getCar(currentOrder.value.carId) || null
+})
+
 const openReturn = (row) => {
   returnForm.rentOrderId = row.id
-  returnForm.actualMileage = 0
+  returnForm.actualMileage = currentReturnCar.value?.mileage || 0
   returnForm.damageDesc = ''
   returnVisible.value = true
 }
@@ -132,65 +177,62 @@ onMounted(loadData)
       </div>
     </section>
 
-    <div class="page-card">
-      <div class="page-header compact-page-head">
+    <div class="page-card" v-loading="loading">
+      <div class="section-head">
         <div>
-          <h2 class="page-title">租车信息管理</h2>
-          <p class="page-desc">点击任意订单可查看完整详情，用户也可以直接从详情中发起还车申请。</p>
+          <h3>订单明细</h3>
+          <p>点击任意行可查看该订单全部信息。</p>
         </div>
+        <el-button v-if="isAdmin" type="primary" plain @click="exportCSV">导出 CSV</el-button>
       </div>
 
-      <div class="summary-grid">
-        <div class="summary-card"><span>订单总数</span><strong>{{ orders.length }}</strong></div>
-        <div class="summary-card"><span>当前租赁中</span><strong>{{ activeCount }}</strong></div>
-        <div class="summary-card"><span>已完成归还</span><strong>{{ returnedCount }}</strong></div>
-        <div class="summary-card"><span>累计总租金</span><strong>{{ formatMoney(totalIncome) }}</strong></div>
+      <div class="table-shell">
+        <el-table :data="paginatedOrders" stripe row-class-name="clickable-row" @row-click="openDetail">
+          <el-table-column v-if="isAdmin" prop="orderNo" label="订单编号" min-width="170" />
+          <el-table-column v-if="isAdmin" prop="userId" label="用户ID" width="90" />
+          <el-table-column :label="isAdmin ? '车辆编号' : '车型'" min-width="220">
+            <template #default="scope">
+              {{ isAdmin ? formatCarNo(scope.row.carId) : formatCarName(scope.row.carId) }}
+            </template>
+          </el-table-column>
+          <el-table-column v-if="!isAdmin" label="车牌号" min-width="150">
+            <template #default="scope">
+              {{ formatPlateNumber(scope.row.carId) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="rentDate" label="租车日期" min-width="120" />
+          <el-table-column prop="expectedReturnDate" label="预计还车日期" min-width="130" />
+          <el-table-column v-if="!isAdmin" label="创建时间" min-width="170">
+            <template #default="scope">
+              {{ formatDateTime(scope.row.createTime) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="rentDays" label="天数" width="90" />
+          <el-table-column label="总租金" min-width="120">
+            <template #default="scope">
+              {{ formatMoney(scope.row.totalPrice) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="110">
+            <template #default="scope">
+              <span class="status-badge" :class="statusTone(scope.row.orderStatus)">
+                {{ formatOrderStatus(scope.row.orderStatus) }}
+              </span>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
 
-      <div class="section-card">
-        <div class="section-head">
-          <div>
-            <h3>订单明细</h3>
-            <p>点击任意行可查看该订单全部信息。</p>
-          </div>
-        </div>
-
-        <div class="table-shell">
-          <el-table :data="orders" stripe row-class-name="clickable-row" @row-click="openDetail">
-            <el-table-column v-if="isAdmin" prop="orderNo" label="订单编号" min-width="170" />
-            <el-table-column v-if="isAdmin" prop="userId" label="用户ID" width="90" />
-            <el-table-column :label="isAdmin ? '车辆编号' : '车型'" min-width="220">
-              <template #default="scope">
-                {{ isAdmin ? formatCarNo(scope.row.carId) : formatCarName(scope.row.carId) }}
-              </template>
-            </el-table-column>
-            <el-table-column v-if="!isAdmin" label="车牌号" min-width="150">
-              <template #default="scope">
-                {{ formatPlateNumber(scope.row.carId) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="rentDate" label="租车日期" min-width="120" />
-            <el-table-column prop="expectedReturnDate" label="预计还车日期" min-width="130" />
-            <el-table-column v-if="!isAdmin" label="创建时间" min-width="170">
-              <template #default="scope">
-                {{ formatDateTime(scope.row.createTime) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="rentDays" label="天数" width="90" />
-            <el-table-column label="总租金" min-width="120">
-              <template #default="scope">
-                {{ formatMoney(scope.row.totalPrice) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="状态" width="110">
-              <template #default="scope">
-                <span class="status-badge" :class="statusTone(scope.row.orderStatus)">
-                  {{ formatOrderStatus(scope.row.orderStatus) }}
-                </span>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
+      <div v-if="orders.length > pageSize" class="pagination-wrap">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :total="orders.length"
+          :page-sizes="[10, 20, 50]"
+          layout="total, sizes, prev, pager, next"
+          @current-change="handlePageChange"
+          @size-change="handleSizeChange"
+        />
       </div>
 
       <div v-if="isAdmin" class="soft-note">
@@ -210,7 +252,7 @@ onMounted(loadData)
 
         <div class="order-detail-shell">
           <div class="order-detail-cover">
-            <img :src="formatCarImage(currentOrder.carId)" :alt="formatCarName(currentOrder.carId)" />
+            <img :src="formatCarImage(currentOrder.carId)" :alt="formatCarName(currentOrder.carId)" @error="(e) => e.target.src = placeholderImage" />
           </div>
 
           <div class="order-detail-content">
@@ -293,10 +335,16 @@ onMounted(loadData)
       </section>
     </div>
 
-    <el-dialog v-model="returnVisible" title="提交还车申请" width="520px">
+    <el-dialog v-model="returnVisible" title="提交还车申请" width="520px" append-to-body :z-index="2200">
       <el-form label-width="100px">
-        <el-form-item label="当前公里数">
-          <el-input-number v-model="returnForm.actualMileage" :min="0" style="width: 100%" />
+        <el-form-item v-if="currentReturnCar" label="当前车辆">
+          <span>{{ currentReturnCar.brand }} {{ currentReturnCar.model }} ({{ currentReturnCar.plateNumber }})</span>
+        </el-form-item>
+        <el-form-item v-if="currentReturnCar" label="初始公里数">
+          <span>{{ currentReturnCar.mileage }} km</span>
+        </el-form-item>
+        <el-form-item label="还车公里数">
+          <el-input-number v-model="returnForm.actualMileage" :min="currentReturnCar?.mileage || 0" style="width: 100%" />
         </el-form-item>
         <el-form-item label="损坏说明">
           <el-input v-model="returnForm.damageDesc" type="textarea" :rows="4" placeholder="没有可留空" />
@@ -445,6 +493,12 @@ onMounted(loadData)
   background: rgba(191, 108, 47, 0.1);
   color: var(--brand-deep);
   cursor: pointer;
+}
+
+.pagination-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 @media (max-width: 720px) {
