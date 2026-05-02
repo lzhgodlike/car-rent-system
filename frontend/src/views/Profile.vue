@@ -1,10 +1,11 @@
 ﻿<script setup>
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../utils/request'
 import { getAuth, setAuth } from '../utils/auth'
 
 const auth = getAuth()
+const formRef = ref(null)
 const form = reactive({
   realName: '',
   phone: '',
@@ -12,6 +13,22 @@ const form = reactive({
   gender: '',
   password: '',
 })
+
+const phonePattern = /^1[3-9]\d{9}$/
+const idCardPattern = /^(\d{15}|\d{17}[\dXx])$/
+
+const rules = {
+  realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
+  phone: [
+    { required: true, message: '请输入手机号', trigger: 'blur' },
+    { validator: (_r, value, cb) => phonePattern.test(value) ? cb() : cb(new Error('请输入合法手机号')), trigger: ['blur', 'change'] },
+  ],
+  idCard: [
+    { required: true, message: '请输入身份证号', trigger: 'blur' },
+    { validator: (_r, value, cb) => idCardPattern.test(value) ? cb() : cb(new Error('请输入合法身份证号')), trigger: ['blur', 'change'] },
+  ],
+  gender: [{ required: true, message: '请选择性别', trigger: 'change' }],
+}
 
 const profileReady = computed(() => [form.realName, form.phone, form.idCard, form.gender].filter(Boolean).length)
 
@@ -21,6 +38,11 @@ const loadData = async () => {
 }
 
 const save = async () => {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) {
+    ElMessage.warning('请先修正表单信息')
+    return
+  }
   await request.put('/users/profile', form)
   const latest = await request.get('/auth/me')
   setAuth({ ...auth, userInfo: latest })
@@ -44,19 +66,6 @@ onMounted(loadData)
     </section>
 
     <div class="page-card">
-      <!-- <div class="page-header compact-page-head">
-        <div>
-          <h2 class="page-title">个人信息维护</h2>
-          <p class="page-desc">支持维护个人信息、联系方式和登录密码。</p>
-        </div>
-      </div>
-
-      <div class="summary-grid">
-        <div class="summary-card"><span>用户名</span><strong>{{ auth?.userInfo?.username || '-' }}</strong></div>
-        <div class="summary-card"><span>角色</span><strong>{{ auth?.userInfo?.role || '-' }}</strong></div>
-        <div class="summary-card"><span>资料完整度</span><strong>{{ profileReady }}/4</strong></div>
-      </div> -->
-
       <div class="section-card profile-form-card">
         <div class="section-head">
           <div>
@@ -65,11 +74,11 @@ onMounted(loadData)
           </div>
         </div>
 
-        <el-form label-width="90px">
-          <el-form-item label="姓名"><el-input v-model="form.realName" /></el-form-item>
-          <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
-          <el-form-item label="身份证号"><el-input v-model="form.idCard" /></el-form-item>
-          <el-form-item label="性别">
+        <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+          <el-form-item label="姓名" prop="realName"><el-input v-model="form.realName" /></el-form-item>
+          <el-form-item label="手机号" prop="phone"><el-input v-model="form.phone" /></el-form-item>
+          <el-form-item label="身份证号" prop="idCard"><el-input v-model="form.idCard" /></el-form-item>
+          <el-form-item label="性别" prop="gender">
             <el-select v-model="form.gender" style="width: 100%">
               <el-option label="男" value="男" />
               <el-option label="女" value="女" />

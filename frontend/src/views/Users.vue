@@ -6,6 +6,7 @@ import request from '../utils/request'
 const users = ref([])
 const dialogVisible = ref(false)
 const currentId = ref(null)
+const loading = ref(false)
 const form = reactive({
   username: '',
   realName: '',
@@ -18,7 +19,12 @@ const form = reactive({
 })
 
 const loadUsers = async () => {
-  users.value = await request.get('/users')
+  loading.value = true
+  try {
+    users.value = await request.get('/users')
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(loadUsers)
@@ -70,58 +76,42 @@ const saveUser = async () => {
       </div>
     </section>
 
-    <div class="page-card">
-      <div class="page-header compact-page-head">
+    <div class="page-card" v-loading="loading">
+      <div class="section-head">
         <div>
-          <h2 class="page-title">用户信息管理</h2>
-          <p class="page-desc">管理员可查看并编辑系统用户信息，便于后续运营与账号管理。</p>
+          <h3>平台成员列表</h3>
+          <p>支持查看用户名、联系方式、身份信息、角色与账号状态，并可直接编辑。</p>
         </div>
       </div>
 
-      <div class="summary-grid">
-        <div class="summary-card"><span>用户总数</span><strong>{{ users.length }}</strong></div>
-        <div class="summary-card"><span>管理员</span><strong>{{ adminCount }}</strong></div>
-        <div class="summary-card"><span>普通用户</span><strong>{{ normalCount }}</strong></div>
-        <div class="summary-card"><span>男女用户</span><strong>{{ maleCount }}/{{ femaleCount }}</strong></div>
-      </div>
-
-      <div class="section-card">
-        <div class="section-head">
-          <div>
-            <h3>平台成员列表</h3>
-            <p>支持查看用户名、联系方式、身份信息、角色与账号状态，并可直接编辑。</p>
-          </div>
-        </div>
-
-        <div class="table-shell">
-          <el-table :data="users" stripe>
-            <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column prop="username" label="用户名" />
-            <el-table-column prop="realName" label="姓名" />
-            <el-table-column prop="phone" label="手机号" />
-            <el-table-column prop="idCard" label="身份证号" />
-            <el-table-column prop="gender" label="性别" width="90" />
-            <el-table-column label="角色" width="110">
-              <template #default="scope">
-                <span class="status-badge" :class="roleTone(scope.row.role)">
-                  {{ roleLabel(scope.row.role) }}
-                </span>
-              </template>
-            </el-table-column>
-            <el-table-column label="状态" width="100">
-              <template #default="scope">
-                <span class="status-badge" :class="statusTone(scope.row.status)">
-                  {{ statusLabel(scope.row.status) }}
-                </span>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="120">
-              <template #default="scope">
-                <el-button size="small" type="primary" @click="openEdit(scope.row)">编辑</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
+      <div class="table-shell">
+        <el-table :data="users" stripe>
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="username" label="用户名" />
+          <el-table-column prop="realName" label="姓名" />
+          <el-table-column prop="phone" label="手机号" />
+          <el-table-column prop="idCard" label="身份证号" />
+          <el-table-column prop="gender" label="性别" width="90" />
+          <el-table-column label="角色" width="110">
+            <template #default="scope">
+              <span class="status-badge" :class="roleTone(scope.row.role)">
+                {{ roleLabel(scope.row.role) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="100">
+            <template #default="scope">
+              <span class="status-badge" :class="statusTone(scope.row.status)">
+                {{ statusLabel(scope.row.status) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120">
+            <template #default="scope">
+              <el-button size="small" type="primary" @click="openEdit(scope.row)">编辑</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
     </div>
 

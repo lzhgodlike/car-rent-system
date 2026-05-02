@@ -152,7 +152,7 @@ const handleMouseLeave = () => {
     <section class="login-scene-copy">
       <div class="login-badge">RoadFlow Car Rental</div>
       <h1>租车管理系统</h1>
-      <p></p>
+      <p>高效管理车辆、订单与用户，一站式完成租车、还车和车况维护。</p>
       <div class="login-highlight-grid">
         <article class="login-highlight-card">
           <span>车辆展厅</span>
@@ -187,7 +187,7 @@ const handleMouseLeave = () => {
 
         <el-tabs v-model="activeTab" stretch class="login-tabs">
           <el-tab-pane label="登录" name="login">
-            <el-form class="login-form" label-position="top" @submit.prevent>
+            <el-form class="login-form" label-position="top" @submit.prevent="handleLogin">
               <div class="form-group">
                 <el-input v-model="loginForm.username" class="glass-input-shell" placeholder="请输入用户名" />
               </div>
@@ -203,7 +203,7 @@ const handleMouseLeave = () => {
               </div>
 
               <el-button class="glass-button" type="primary" :loading="loading" @click="handleLogin">
-                立即登录
+                {{ loading ? '登录中...' : '立即登录' }}
               </el-button>
             </el-form>
           </el-tab-pane>
@@ -216,7 +216,7 @@ const handleMouseLeave = () => {
               :model="registerForm"
               :rules="registerRules"
               status-icon
-              @submit.prevent
+              @submit.prevent="handleRegister"
             >
               <el-form-item class="form-group" prop="username">
                 <el-input v-model="registerForm.username" class="glass-input-shell" placeholder="请输入用户名" />
@@ -255,7 +255,7 @@ const handleMouseLeave = () => {
               </el-form-item>
 
               <el-button class="glass-button" type="primary" :loading="loading" @click="handleRegister">
-                完成注册
+                {{ loading ? '注册中...' : '完成注册' }}
               </el-button>
             </el-form>
           </el-tab-pane>
@@ -382,7 +382,7 @@ const handleMouseLeave = () => {
   width: min(100%, 460px);
   position: relative;
   justify-self: start;
-  margin-left: -40%;
+  transform: translateX(-20%);
   border-radius: 28px;
   overflow: hidden;
   background: transparent;
@@ -546,6 +546,21 @@ const handleMouseLeave = () => {
   display: none;
 }
 
+:deep(.login-tabs .el-tab-pane) {
+  animation: tabSlideIn 0.3s ease;
+}
+
+@keyframes tabSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 :deep(.glass-input-shell .el-input__wrapper) {
   min-height: 46px;
   box-shadow: none !important;
@@ -636,7 +651,7 @@ const handleMouseLeave = () => {
   .login-card {
     justify-self: stretch;
     width: 100%;
-    margin-left: 0;
+    transform: none;
   }
 
   .login-scene-copy h1 {

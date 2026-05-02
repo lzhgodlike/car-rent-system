@@ -20,6 +20,10 @@ const routes = [
       { path: 'users', component: () => import('../views/Users.vue') },
     ],
   },
+  {
+    path: '/:pathMatch(.*)*',
+    component: () => import('../views/NotFound.vue'),
+  },
 ]
 
 const router = createRouter({
