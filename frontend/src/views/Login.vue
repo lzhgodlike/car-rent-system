@@ -604,6 +604,22 @@ const handleMouseLeave = () => {
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
 }
 
+.glass-button.el-button {
+  padding: 12px 20px;
+  border: none !important;
+  border-color: transparent !important;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18) !important;
+}
+
+.glass-button.el-button:hover {
+  border-color: transparent !important;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.2) !important;
+}
+
+.glass-button.el-button:active {
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18) !important;
+}
+
 .glass-button:hover {
   background: linear-gradient(135deg, rgba(255, 210, 140, 0.54), rgba(255, 255, 255, 0.24));
   transform: translateY(-2px);

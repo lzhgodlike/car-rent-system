@@ -838,3 +838,141 @@ textarea {
 .el-form--inline .el-form-item {
   margin-bottom: 12px;
 }
+
+.el-overlay {
+  background: rgba(17, 13, 10, 0.52) !important;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.el-dialog {
+  overflow: hidden;
+  border: 1px solid rgba(191, 108, 47, 0.12);
+  border-radius: 24px !important;
+  background: linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(248, 240, 230, 0.98)) !important;
+  box-shadow: 0 28px 80px rgba(29, 20, 13, 0.28) !important;
+}
+
+.el-dialog__header {
+  margin-right: 0;
+  padding: 18px 28px !important;
+  border-bottom: 1px solid rgba(191, 108, 47, 0.12);
+}
+
+.el-dialog__title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.el-dialog__headerbtn {
+  top: 16px !important;
+  right: 18px !important;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba(191, 108, 47, 0.1);
+  transition: 0.2s ease;
+}
+
+.el-dialog__headerbtn:hover {
+  background: rgba(191, 108, 47, 0.18);
+}
+
+.el-dialog__close {
+  color: var(--brand-deep) !important;
+}
+
+.el-dialog__body {
+  padding: 22px 28px !important;
+}
+
+.el-dialog__footer {
+  padding: 18px 28px 20px !important;
+  border-top: 1px solid rgba(191, 108, 47, 0.12);
+}
+
+.el-button {
+  --el-button-border-color: rgba(191, 108, 47, 0.18);
+  --el-button-hover-border-color: rgba(191, 108, 47, 0.32);
+  --el-button-active-border-color: rgba(127, 53, 20, 0.42);
+  min-height: 40px;
+  padding: 10px 18px;
+  border-radius: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 10px 24px rgba(83, 53, 26, 0.08);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(83, 53, 26, 0.12);
+}
+
+.el-button:active {
+  transform: translateY(0);
+  box-shadow: 0 8px 18px rgba(83, 53, 26, 0.12);
+}
+
+.el-button + .el-button {
+  margin-left: 10px;
+}
+
+.el-button--default,
+.el-button.is-plain:not(.el-button--primary):not(.el-button--danger):not(.el-button--success):not(.el-button--warning) {
+  color: var(--text);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 241, 232, 0.94));
+  border-color: rgba(191, 108, 47, 0.16);
+}
+
+.el-button--default:hover,
+.el-button.is-plain:not(.el-button--primary):not(.el-button--danger):not(.el-button--success):not(.el-button--warning):hover {
+  color: var(--brand-deep);
+  background: linear-gradient(180deg, rgba(255, 252, 247, 1), rgba(247, 234, 220, 0.98));
+  border-color: rgba(191, 108, 47, 0.28);
+}
+
+.el-button--primary {
+  background: linear-gradient(135deg, #bf6c2f, #8a3f18) !important;
+  border-color: rgba(127, 53, 20, 0.22) !important;
+  color: #fff7f0 !important;
+  box-shadow: 0 14px 30px rgba(127, 53, 20, 0.2);
+}
+
+.el-button--primary:hover {
+  background: linear-gradient(135deg, #ca7a3d, #9b4a21) !important;
+  border-color: rgba(127, 53, 20, 0.28) !important;
+}
+
+.el-button--primary.is-plain {
+  color: var(--brand-deep) !important;
+  background: linear-gradient(180deg, rgba(255, 243, 231, 0.98), rgba(245, 224, 204, 0.96)) !important;
+  border-color: rgba(191, 108, 47, 0.2) !important;
+  box-shadow: 0 10px 24px rgba(83, 53, 26, 0.08);
+}
+
+.el-button--danger {
+  background: linear-gradient(135deg, #c6604e, #9e392d) !important;
+  border-color: rgba(134, 35, 27, 0.2) !important;
+  color: #fff7f5 !important;
+  box-shadow: 0 14px 30px rgba(145, 47, 38, 0.16);
+}
+
+.el-button--danger.is-plain {
+  color: var(--danger) !important;
+  background: linear-gradient(180deg, rgba(255, 245, 243, 0.98), rgba(252, 230, 226, 0.96)) !important;
+  border-color: rgba(176, 74, 55, 0.18) !important;
+}
+
+.el-button.is-disabled,
+.el-button.is-disabled:hover {
+  transform: none;
+  box-shadow: none;
+  opacity: 0.72;
+}
