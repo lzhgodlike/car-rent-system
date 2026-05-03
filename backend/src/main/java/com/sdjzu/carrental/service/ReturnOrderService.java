@@ -5,17 +5,24 @@ import com.sdjzu.carrental.common.BusinessException;
 import com.sdjzu.carrental.mapper.CarMapper;
 import com.sdjzu.carrental.mapper.RentOrderMapper;
 import com.sdjzu.carrental.mapper.ReturnOrderMapper;
+import com.sdjzu.carrental.model.dto.CarInfo;
+import com.sdjzu.carrental.model.dto.RentOrderBrief;
 import com.sdjzu.carrental.model.entity.Car;
 import com.sdjzu.carrental.model.entity.RentOrder;
 import com.sdjzu.carrental.model.entity.ReturnOrder;
 import com.sdjzu.carrental.model.request.ReturnConfirmRequest;
 import com.sdjzu.carrental.model.request.ReturnOrderRequest;
 import com.sdjzu.carrental.security.SecurityUtils;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.sdjzu.carrental.common.PageResult;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -56,9 +63,17 @@ public class ReturnOrderService {
         returnOrderMapper.insert(returnOrder);
     }
 
-    public List<ReturnOrder> list() {
+    public PageResult<ReturnOrder> list(int pageNum, int pageSize) {
         if (SecurityUtils.isAdmin()) {
-            return returnOrderMapper.selectList(new LambdaQueryWrapper<ReturnOrder>().orderByDesc(ReturnOrder::getId));
+            Page<ReturnOrder> page = returnOrderMapper.selectPage(new Page<>(pageNum, pageSize),
+                    new LambdaQueryWrapper<ReturnOrder>().orderByDesc(ReturnOrder::getId));
+            PageResult<ReturnOrder> result = PageResult.of(page);
+            result.summary("pending", returnOrderMapper.selectCount(
+                    new LambdaQueryWrapper<ReturnOrder>().eq(ReturnOrder::getStatus, "PENDING")));
+            result.summary("confirmed", returnOrderMapper.selectCount(
+                    new LambdaQueryWrapper<ReturnOrder>().eq(ReturnOrder::getStatus, "CONFIRMED")));
+            enrichWithCarInfo(page.getRecords());
+            return result;
         }
 
         List<Long> rentIds = rentOrderMapper.selectList(new LambdaQueryWrapper<RentOrder>()
@@ -67,11 +82,49 @@ public class ReturnOrderService {
                 .map(RentOrder::getId)
                 .collect(Collectors.toList());
         if (rentIds.isEmpty()) {
-            return Collections.emptyList();
+            PageResult<ReturnOrder> result = new PageResult<>();
+            result.setRecords(Collections.emptyList());
+            result.setTotal(0);
+            result.setPageNum(pageNum);
+            result.setPageSize(pageSize);
+            return result;
         }
-        return returnOrderMapper.selectList(new LambdaQueryWrapper<ReturnOrder>()
-                .in(ReturnOrder::getRentOrderId, rentIds)
-                .orderByDesc(ReturnOrder::getId));
+        Page<ReturnOrder> page = returnOrderMapper.selectPage(new Page<>(pageNum, pageSize),
+                new LambdaQueryWrapper<ReturnOrder>()
+                        .in(ReturnOrder::getRentOrderId, rentIds)
+                        .orderByDesc(ReturnOrder::getId));
+        PageResult<ReturnOrder> result = PageResult.of(page);
+        result.summary("pending", returnOrderMapper.selectCount(
+                new LambdaQueryWrapper<ReturnOrder>().in(ReturnOrder::getRentOrderId, rentIds).eq(ReturnOrder::getStatus, "PENDING")));
+        result.summary("confirmed", returnOrderMapper.selectCount(
+                new LambdaQueryWrapper<ReturnOrder>().in(ReturnOrder::getRentOrderId, rentIds).eq(ReturnOrder::getStatus, "CONFIRMED")));
+        enrichWithCarInfo(page.getRecords());
+        return result;
+    }
+
+    private void enrichWithCarInfo(List<ReturnOrder> returns) {
+        if (returns == null || returns.isEmpty()) return;
+        List<Long> rentOrderIds = returns.stream().map(ReturnOrder::getRentOrderId).distinct().collect(Collectors.toList());
+        Map<Long, RentOrder> rentOrderMap = rentOrderMapper.selectBatchIds(rentOrderIds).stream()
+                .collect(Collectors.toMap(RentOrder::getId, r -> r, (a, b) -> a));
+        List<Long> carIds = rentOrderMap.values().stream().map(RentOrder::getCarId).distinct().collect(Collectors.toList());
+        Map<Long, Car> carMap = carIds.isEmpty() ? Collections.emptyMap() :
+                carMapper.selectBatchIds(carIds).stream()
+                        .collect(Collectors.toMap(Car::getId, c -> c, (a, b) -> a));
+        for (ReturnOrder ret : returns) {
+            RentOrder rentOrder = rentOrderMap.get(ret.getRentOrderId());
+            if (rentOrder != null) {
+                RentOrderBrief brief = new RentOrderBrief();
+                BeanUtils.copyProperties(rentOrder, brief);
+                ret.setRentOrderBrief(brief);
+                Car car = carMap.get(rentOrder.getCarId());
+                if (car != null) {
+                    CarInfo info = new CarInfo();
+                    BeanUtils.copyProperties(car, info);
+                    ret.setCarInfo(info);
+                }
+            }
+        }
     }
 
     public void confirm(Long id, ReturnConfirmRequest request) {

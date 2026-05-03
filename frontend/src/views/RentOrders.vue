@@ -8,8 +8,6 @@ const auth = getAuth()
 const isAdmin = computed(() => auth?.userInfo?.role === 'ADMIN')
 
 const orders = ref([])
-const cars = ref([])
-const returnOrders = ref([])
 const loading = ref(false)
 
 const detailVisible = ref(false)
@@ -18,12 +16,10 @@ const currentOrder = ref(null)
 
 const currentPage = ref(1)
 const pageSize = ref(10)
-const paginatedOrders = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return orders.value.slice(start, start + pageSize.value)
-})
-const handlePageChange = (page) => { currentPage.value = page }
-const handleSizeChange = (size) => { pageSize.value = size; currentPage.value = 1 }
+const total = ref(0)
+const summary = ref({})
+const handlePageChange = (page) => { currentPage.value = page; loadData() }
+const handleSizeChange = (size) => { pageSize.value = size; currentPage.value = 1; loadData() }
 
 const returnForm = reactive({
   rentOrderId: null,
@@ -39,25 +35,10 @@ const orderStatusMap = {
 const placeholderImage =
   'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1200&q=80'
 
-const activeCount = computed(() => orders.value.filter((item) => item.orderStatus === 'RENTED').length)
-const returnedCount = computed(() => orders.value.filter((item) => item.orderStatus === 'RETURNED').length)
-const totalIncome = computed(() =>
-  orders.value.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0).toFixed(2),
-)
-
-const carMap = computed(() => {
-  const map = new Map()
-  cars.value.forEach((car) => {
-    map.set(car.id, car)
-  })
-  return map
-})
-
-const submittedReturnIds = computed(() => new Set(returnOrders.value.map((item) => item.rentOrderId)))
-
 const statusTone = (status) => (status === 'RENTED' ? 'warning' : 'success')
 const formatOrderStatus = (status) => orderStatusMap[status] || status || '-'
 const formatMoney = (value) => `￥${Number(value || 0).toFixed(2)}`
+const totalAmount = (row) => Number(row.totalPrice || 0) + Number(row.extraFee || 0)
 
 const formatDateTime = (value) => {
   if (!value) {
@@ -66,47 +47,39 @@ const formatDateTime = (value) => {
   return String(value).replace('T', ' ')
 }
 
-const getCar = (carId) => carMap.value.get(carId) || null
-const formatCarNo = (carId) => getCar(carId)?.carNo || '-'
-const formatPlateNumber = (carId) => getCar(carId)?.plateNumber || '-'
-const formatCarName = (carId) => {
-  const car = getCar(carId)
-  if (!car) {
-    return '-'
-  }
-  return `${car.brand || ''} ${car.model || ''}`.trim() || '-'
+const carNo = (row) => row.carInfo?.carNo || '-'
+const plateNumber = (row) => row.carInfo?.plateNumber || '-'
+const carName = (row) => {
+  const c = row.carInfo
+  if (!c) return '-'
+  return `${c.brand || ''} ${c.model || ''}`.trim() || '-'
 }
-const formatCarImage = (carId) => getCar(carId)?.carImage || placeholderImage
-
-const hasReturnRequest = (orderId) => submittedReturnIds.value.has(orderId)
+const carImage = (row) => row.carInfo?.carImage || placeholderImage
 
 const loadData = async () => {
   loading.value = true
   try {
-    const [orderData, carData, returnData] = await Promise.all([
-      request.get('/rent-orders'),
-      request.get('/cars'),
-      request.get('/return-orders'),
-    ])
-    orders.value = orderData
-    cars.value = carData
-    returnOrders.value = returnData
+    const orderPage = await request.get('/rent-orders', { params: { pageNum: currentPage.value, pageSize: pageSize.value } })
+    orders.value = orderPage.records
+    total.value = orderPage.total
+    summary.value = orderPage.summary || {}
   } finally {
     loading.value = false
   }
 }
 
-const exportCSV = () => {
+const exportCSV = async () => {
+  const allData = await request.get('/rent-orders', { params: { pageNum: 1, pageSize: total.value || 9999 } })
   const header = ['订单编号', '用户ID', '车辆名称', '车牌号', '租车日期', '预计还车', '天数', '总租金', '状态']
-  const rows = orders.value.map((o) => [
+  const rows = allData.records.map((o) => [
     o.orderNo || '',
     o.userId || '',
-    formatCarName(o.carId),
-    formatPlateNumber(o.carId),
+    carName(o),
+    plateNumber(o),
     o.rentDate || '',
     o.expectedReturnDate || '',
     o.rentDays || 0,
-    o.totalPrice || 0,
+    totalAmount(o),
     formatOrderStatus(o.orderStatus),
   ].map((v) => {
     const s = String(v ?? '')
@@ -132,7 +105,7 @@ const closeDetail = () => {
 
 const currentReturnCar = computed(() => {
   if (!currentOrder.value) return null
-  return getCar(currentOrder.value.carId) || null
+  return currentOrder.value.carInfo || null
 })
 
 const openReturn = (row) => {
@@ -143,6 +116,10 @@ const openReturn = (row) => {
 }
 
 const submitReturn = async () => {
+  if (returnForm.actualMileage <= (currentReturnCar.value?.mileage || 0)) {
+    ElMessage.warning('还车公里数必须大于初始公里数')
+    return
+  }
   await request.post('/return-orders', returnForm)
   ElMessage.success('还车申请已提交')
   returnVisible.value = false
@@ -170,10 +147,9 @@ onMounted(loadData)
         这里集中查看每一笔租车订单，快速确认车辆名称、车牌号、租期、状态和订单金额。
       </p>
       <div class="metric-strip">
-        <div class="metric-pill"><span>订单总数</span><strong>{{ orders.length }}</strong></div>
-        <div class="metric-pill"><span>租赁中</span><strong>{{ activeCount }}</strong></div>
-        <div class="metric-pill"><span>已归还</span><strong>{{ returnedCount }}</strong></div>
-        <div class="metric-pill"><span>累计租金</span><strong>{{ formatMoney(totalIncome) }}</strong></div>
+        <div class="metric-pill"><span>订单总数</span><strong>{{ total }}</strong></div>
+        <div class="metric-pill"><span>租赁中</span><strong>{{ summary.active ?? 0 }}</strong></div>
+        <div class="metric-pill"><span>已归还</span><strong>{{ summary.returned ?? 0 }}</strong></div>
       </div>
     </section>
 
@@ -187,17 +163,17 @@ onMounted(loadData)
       </div>
 
       <div class="table-shell">
-        <el-table :data="paginatedOrders" stripe row-class-name="clickable-row" @row-click="openDetail">
+        <el-table :data="orders" stripe row-class-name="clickable-row" @row-click="openDetail">
           <el-table-column v-if="isAdmin" prop="orderNo" label="订单编号" min-width="170" />
           <el-table-column v-if="isAdmin" prop="userId" label="用户ID" width="90" />
           <el-table-column :label="isAdmin ? '车辆编号' : '车型'" min-width="220">
             <template #default="scope">
-              {{ isAdmin ? formatCarNo(scope.row.carId) : formatCarName(scope.row.carId) }}
+              {{ isAdmin ? carNo(scope.row) : carName(scope.row) }}
             </template>
           </el-table-column>
           <el-table-column v-if="!isAdmin" label="车牌号" min-width="150">
             <template #default="scope">
-              {{ formatPlateNumber(scope.row.carId) }}
+              {{ plateNumber(scope.row) }}
             </template>
           </el-table-column>
           <el-table-column prop="rentDate" label="租车日期" min-width="120" />
@@ -210,7 +186,7 @@ onMounted(loadData)
           <el-table-column prop="rentDays" label="天数" width="90" />
           <el-table-column label="总租金" min-width="120">
             <template #default="scope">
-              {{ formatMoney(scope.row.totalPrice) }}
+              {{ formatMoney(totalAmount(scope.row)) }}
             </template>
           </el-table-column>
           <el-table-column label="状态" width="110">
@@ -223,11 +199,11 @@ onMounted(loadData)
         </el-table>
       </div>
 
-      <div v-if="orders.length > pageSize" class="pagination-wrap">
+      <div v-if="total > pageSize" class="pagination-wrap">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :total="orders.length"
+          :total="total"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next"
           @current-change="handlePageChange"
@@ -245,14 +221,14 @@ onMounted(loadData)
         <header class="detail-modal-header">
           <div>
             <h2>订单详情</h2>
-            <p>{{ formatCarName(currentOrder.carId) }}</p>
+            <p>{{ carName(currentOrder) }}</p>
           </div>
           <button class="detail-close" type="button" @click="closeDetail">关闭</button>
         </header>
 
         <div class="order-detail-shell">
           <div class="order-detail-cover">
-            <img :src="formatCarImage(currentOrder.carId)" :alt="formatCarName(currentOrder.carId)" @error="(e) => e.target.src = placeholderImage" />
+            <img :src="carImage(currentOrder)" :alt="carName(currentOrder)" @error="(e) => e.target.src = placeholderImage" />
           </div>
 
           <div class="order-detail-content">
@@ -267,15 +243,15 @@ onMounted(loadData)
               </div>
               <div class="detail-item">
                 <span>车辆编号</span>
-                <strong>{{ formatCarNo(currentOrder.carId) }}</strong>
+                <strong>{{ carNo(currentOrder) }}</strong>
               </div>
               <div class="detail-item">
                 <span>车辆名称</span>
-                <strong>{{ formatCarName(currentOrder.carId) }}</strong>
+                <strong>{{ carName(currentOrder) }}</strong>
               </div>
               <div class="detail-item">
                 <span>车牌号</span>
-                <strong>{{ formatPlateNumber(currentOrder.carId) }}</strong>
+                <strong>{{ plateNumber(currentOrder) }}</strong>
               </div>
               <div class="detail-item">
                 <span>订单状态</span>
@@ -303,7 +279,7 @@ onMounted(loadData)
               </div>
               <div class="detail-item">
                 <span>总租金</span>
-                <strong>{{ formatMoney(currentOrder.totalPrice) }}</strong>
+                <strong>{{ formatMoney(totalAmount(currentOrder)) }}</strong>
               </div>
               <div class="detail-item">
                 <span>订单创建时间</span>
@@ -319,14 +295,14 @@ onMounted(loadData)
 
         <footer class="detail-modal-footer">
           <el-button
-            v-if="!isAdmin && currentOrder.orderStatus === 'RENTED' && !hasReturnRequest(currentOrder.id)"
+            v-if="!isAdmin && currentOrder.orderStatus === 'RENTED' && !currentOrder.hasReturnRequest"
             type="primary"
             @click="openReturn(currentOrder)"
           >
             申请还车
           </el-button>
           <el-button
-            v-if="!isAdmin && currentOrder.orderStatus === 'RENTED' && hasReturnRequest(currentOrder.id)"
+            v-if="!isAdmin && currentOrder.orderStatus === 'RENTED' && currentOrder.hasReturnRequest"
             disabled
           >
             已提交还车申请
@@ -345,6 +321,7 @@ onMounted(loadData)
         </el-form-item>
         <el-form-item label="还车公里数">
           <el-input-number v-model="returnForm.actualMileage" :min="currentReturnCar?.mileage || 0" style="width: 100%" />
+          <div v-if="currentReturnCar" style="font-size:12px;color:var(--subtext);margin-top:4px">还车公里数不能低于初始值 {{ currentReturnCar.mileage }} km</div>
         </el-form-item>
         <el-form-item label="损坏说明">
           <el-input v-model="returnForm.damageDesc" type="textarea" :rows="4" placeholder="没有可留空" />

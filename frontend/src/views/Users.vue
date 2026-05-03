@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../utils/request'
 
@@ -7,6 +7,12 @@ const users = ref([])
 const dialogVisible = ref(false)
 const currentId = ref(null)
 const loading = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+const summary = ref({})
+const handlePageChange = (page) => { currentPage.value = page; loadUsers() }
+const handleSizeChange = (size) => { pageSize.value = size; currentPage.value = 1; loadUsers() }
 const form = reactive({
   username: '',
   realName: '',
@@ -21,18 +27,16 @@ const form = reactive({
 const loadUsers = async () => {
   loading.value = true
   try {
-    users.value = await request.get('/users')
+    const page = await request.get('/users', { params: { pageNum: currentPage.value, pageSize: pageSize.value } })
+    users.value = page.records
+    total.value = page.total
+    summary.value = page.summary || {}
   } finally {
     loading.value = false
   }
 }
 
 onMounted(loadUsers)
-
-const adminCount = computed(() => users.value.filter((item) => item.role === 'ADMIN').length)
-const normalCount = computed(() => users.value.filter((item) => item.role !== 'ADMIN').length)
-const maleCount = computed(() => users.value.filter((item) => item.gender === '男').length)
-const femaleCount = computed(() => users.value.filter((item) => item.gender === '女').length)
 
 const roleLabel = (role) => (role === 'ADMIN' ? '管理员' : '普通用户')
 const roleTone = (role) => (role === 'ADMIN' ? 'danger' : 'neutral')
@@ -69,10 +73,9 @@ const saveUser = async () => {
       <h1 class="hero-title">用户管理</h1>
       <p class="hero-desc">快速查看系统内成员规模、角色分布和基础身份信息，也可以直接编辑用户资料与账号状态。</p>
       <div class="metric-strip">
-        <div class="metric-pill"><span>用户总数</span><strong>{{ users.length }}</strong></div>
-        <div class="metric-pill"><span>管理员</span><strong>{{ adminCount }}</strong></div>
-        <div class="metric-pill"><span>普通用户</span><strong>{{ normalCount }}</strong></div>
-        <div class="metric-pill"><span>男女分布</span><strong>{{ maleCount }}/{{ femaleCount }}</strong></div>
+        <div class="metric-pill"><span>用户总数</span><strong>{{ total }}</strong></div>
+        <div class="metric-pill"><span>管理员</span><strong>{{ summary.admin ?? 0 }}</strong></div>
+        <div class="metric-pill"><span>普通用户</span><strong>{{ summary.normal ?? 0 }}</strong></div>
       </div>
     </section>
 
@@ -113,6 +116,18 @@ const saveUser = async () => {
           </el-table-column>
         </el-table>
       </div>
+
+      <div v-if="total > pageSize" class="pagination-wrap">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50]"
+          layout="total, sizes, prev, pager, next"
+          @current-change="handlePageChange"
+          @size-change="handleSizeChange"
+        />
+      </div>
     </div>
 
     <el-dialog v-model="dialogVisible" title="编辑用户信息" width="560px">
@@ -150,3 +165,11 @@ const saveUser = async () => {
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.pagination-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+</style>

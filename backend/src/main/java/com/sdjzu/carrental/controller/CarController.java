@@ -1,6 +1,7 @@
 package com.sdjzu.carrental.controller;
 
 import com.sdjzu.carrental.common.ApiResponse;
+import com.sdjzu.carrental.common.PageResult;
 import com.sdjzu.carrental.model.entity.Car;
 import com.sdjzu.carrental.model.request.CarRequest;
 import com.sdjzu.carrental.service.CarService;
@@ -28,10 +29,18 @@ public class CarController {
     }
 
     @GetMapping
-    public ApiResponse<List<Car>> list(@RequestParam(required = false) String brand,
-                                       @RequestParam(required = false) Long typeId,
-                                       @RequestParam(required = false) String status) {
-        return ApiResponse.success(carService.list(brand, typeId, status));
+    public ApiResponse<PageResult<Car>> list(@RequestParam(required = false) String brand,
+                                              @RequestParam(required = false) Long typeId,
+                                              @RequestParam(required = false) String status,
+                                              @RequestParam(required = false) String sort,
+                                              @RequestParam(defaultValue = "1") int pageNum,
+                                              @RequestParam(defaultValue = "10") int pageSize) {
+        return ApiResponse.success(carService.list(brand, typeId, status, sort, pageNum, pageSize));
+    }
+
+    @GetMapping("/brands")
+    public ApiResponse<List<String>> brands() {
+        return ApiResponse.success(carService.listBrands());
     }
 
     @GetMapping("/{id}")

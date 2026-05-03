@@ -1,5 +1,5 @@
 ﻿<script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../utils/request'
 import { getAuth } from '../utils/auth'
@@ -8,23 +8,23 @@ const auth = getAuth()
 const isAdmin = computed(() => auth?.userInfo?.role === 'ADMIN')
 const records = ref([])
 const rentOrders = ref([])
-const cars = ref([])
 const createForm = reactive({ rentOrderId: null, actualMileage: 0, damageDesc: '' })
 const confirmDialog = ref(false)
 const currentId = ref(null)
 const confirmForm = reactive({ extraFee: 0 })
 const loading = ref(false)
 
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+const summary = ref({})
+const handlePageChange = (page) => { currentPage.value = page; loadData() }
+const handleSizeChange = (size) => { pageSize.value = size; currentPage.value = 1; loadData() }
+
 const returnStatusMap = {
   PENDING: '待确认',
   CONFIRMED: '已确认',
 }
-
-const pendingCount = computed(() => records.value.filter((item) => item.status === 'PENDING').length)
-const confirmedCount = computed(() => records.value.filter((item) => item.status === 'CONFIRMED').length)
-const extraFeeTotal = computed(() =>
-  records.value.reduce((sum, item) => sum + Number(item.extraFee || 0), 0).toFixed(2),
-)
 
 const formatReturnStatus = (status) => returnStatusMap[status] || status || '-'
 const statusTone = (status) => (status === 'PENDING' ? 'warning' : 'success')
@@ -32,84 +32,40 @@ const statusTone = (status) => (status === 'PENDING' ? 'warning' : 'success')
 const loadData = async () => {
   loading.value = true
   try {
-    const [recordData, rentData, carData] = await Promise.all([
-      request.get('/return-orders'),
-      request.get('/rent-orders'),
-      request.get('/cars'),
+    const [recordPage, rentPage] = await Promise.all([
+      request.get('/return-orders', { params: { pageNum: currentPage.value, pageSize: pageSize.value } }),
+      request.get('/rent-orders', { params: { pageNum: 1, pageSize: 9999 } }),
     ])
-    records.value = recordData
-    rentOrders.value = rentData
-    cars.value = carData
+    records.value = recordPage.records
+    total.value = recordPage.total
+    summary.value = recordPage.summary || {}
+    rentOrders.value = rentPage.records
   } finally {
     loading.value = false
   }
 }
 
-const rentOrderMap = computed(() => {
-  const map = new Map()
-  rentOrders.value.forEach((order) => {
-    map.set(order.id, order)
-  })
-  return map
-})
-
-const carNoMap = computed(() => {
-  const map = new Map()
-  cars.value.forEach((car) => {
-    map.set(car.id, car.carNo)
-  })
-  return map
-})
-
-const formatCarNo = (carId) => carNoMap.value.get(carId) || carId || '-'
-
-const formatCarNoByRent = (rentOrderId) => {
-  const order = rentOrderMap.value.get(rentOrderId)
-  if (!order) {
-    return rentOrderId || '-'
-  }
-  return formatCarNo(order.carId)
+const carName = (row) => {
+  const c = row.carInfo
+  if (!c) return '-'
+  return `${c.brand || ''} ${c.model || ''}`.trim() || '-'
 }
-
-const formatCarNameByRent = (rentOrderId) => {
-  const order = rentOrderMap.value.get(rentOrderId)
-  if (!order) return '-'
-  const car = cars.value.find((c) => c.id === order.carId)
-  if (!car) return '-'
-  return `${car.brand || ''} ${car.model || ''}`.trim() || '-'
+const plateNumber = (row) => row.carInfo?.plateNumber || '-'
+const rentPeriod = (row) => {
+  const b = row.rentOrderBrief
+  if (!b) return '-'
+  return `${b.rentDate || ''} 至 ${b.expectedReturnDate || ''}`
 }
-
-const formatPlateByRent = (rentOrderId) => {
-  const order = rentOrderMap.value.get(rentOrderId)
-  if (!order) return '-'
-  const car = cars.value.find((c) => c.id === order.carId)
-  return car?.plateNumber || '-'
-}
-
-const formatRentPeriod = (rentOrderId) => {
-  const order = rentOrderMap.value.get(rentOrderId)
-  if (!order) return '-'
-  return `${order.rentDate || ''} 至 ${order.expectedReturnDate || ''}`
-}
-
-const formatRentDays = (rentOrderId) => {
-  const order = rentOrderMap.value.get(rentOrderId)
-  return order?.rentDays || '-'
-}
+const rentDays = (row) => row.rentOrderBrief?.rentDays || '-'
 
 const currentReturnOrder = computed(() => {
   if (!currentId.value) return null
   return records.value.find((r) => r.id === currentId.value) || null
 })
 
-const currentReturnRent = computed(() => {
-  if (!currentReturnOrder.value) return null
-  return rentOrderMap.value.get(currentReturnOrder.value.rentOrderId) || null
-})
-
 const currentReturnCar = computed(() => {
-  if (!currentReturnRent.value) return null
-  return cars.value.find((c) => c.id === currentReturnRent.value.carId) || null
+  if (!currentReturnOrder.value) return null
+  return currentReturnOrder.value.carInfo || null
 })
 
 const availableRentOrders = computed(() => {
@@ -117,7 +73,21 @@ const availableRentOrders = computed(() => {
   return rentOrders.value.filter((item) => item.orderStatus === 'RENTED' && !appliedIds.has(item.id))
 })
 
+const selectedRentOrderCarMileage = computed(() => {
+  if (!createForm.rentOrderId) return 0
+  const order = rentOrders.value.find((o) => o.id === createForm.rentOrderId)
+  return order?.carInfo?.mileage || 0
+})
+
+watch(() => createForm.rentOrderId, () => {
+  createForm.actualMileage = selectedRentOrderCarMileage.value
+})
+
 const submitReturn = async () => {
+  if (createForm.actualMileage <= selectedRentOrderCarMileage.value) {
+    ElMessage.warning('还车公里数必须大于初始公里数')
+    return
+  }
   await request.post('/return-orders', createForm)
   ElMessage.success('还车申请已提交')
   Object.assign(createForm, { rentOrderId: null, actualMileage: 0, damageDesc: '' })
@@ -147,10 +117,9 @@ onMounted(loadData)
       <h1 class="hero-title">还车记录</h1>
       <p class="hero-desc">这里查看还车申请、公里数和附加费用，管理员可以继续确认还车并完成订单闭环。</p>
       <div class="metric-strip">
-        <div class="metric-pill"><span>记录总数</span><strong>{{ records.length }}</strong></div>
-        <div class="metric-pill"><span>待确认</span><strong>{{ pendingCount }}</strong></div>
-        <div class="metric-pill"><span>已确认</span><strong>{{ confirmedCount }}</strong></div>
-        <div class="metric-pill"><span>附加费用</span><strong>￥{{ extraFeeTotal }}</strong></div>
+        <div class="metric-pill"><span>记录总数</span><strong>{{ total }}</strong></div>
+        <div class="metric-pill"><span>待确认</span><strong>{{ summary.pending ?? 0 }}</strong></div>
+        <div class="metric-pill"><span>已确认</span><strong>{{ summary.confirmed ?? 0 }}</strong></div>
       </div>
     </section>
 
@@ -170,12 +139,14 @@ onMounted(loadData)
                 <el-option
                   v-for="item in availableRentOrders"
                   :key="item.id"
-                  :label="`${item.orderNo} / 车辆编号:${formatCarNo(item.carId)} / ${item.rentDate} 至 ${item.expectedReturnDate}`"
+                  :label="`${item.orderNo} / ${item.carInfo?.brand || ''} ${item.carInfo?.model || ''} (${item.carInfo?.plateNumber || '-'}) / ${item.rentDate} 至 ${item.expectedReturnDate}`"
                   :value="item.id"
                 />
               </el-select>
             </el-form-item>
-            <el-form-item label="当前公里数"><el-input-number v-model="createForm.actualMileage" :min="0" /></el-form-item>
+            <el-form-item label="当前公里数">
+              <el-input-number v-model="createForm.actualMileage" :min="selectedRentOrderCarMileage" style="width: 100%" />
+            </el-form-item>
             <el-form-item label="损坏说明"><el-input v-model="createForm.damageDesc" style="width: 220px" /></el-form-item>
             <el-form-item><el-button type="primary" :disabled="!createForm.rentOrderId" @click="submitReturn">提交还车申请</el-button></el-form-item>
           </el-form>
@@ -188,14 +159,14 @@ onMounted(loadData)
           <el-table :data="records" stripe>
             <el-table-column label="车辆" min-width="180">
               <template #default="scope">
-                <div>{{ formatCarNameByRent(scope.row.rentOrderId) }}</div>
-                <div style="font-size:12px;color:var(--subtext)">{{ formatPlateByRent(scope.row.rentOrderId) }}</div>
+                <div>{{ carName(scope.row) }}</div>
+                <div style="font-size:12px;color:var(--subtext)">{{ plateNumber(scope.row) }}</div>
               </template>
             </el-table-column>
             <el-table-column label="原租期" min-width="200">
               <template #default="scope">
-                <div>{{ formatRentPeriod(scope.row.rentOrderId) }}</div>
-                <div style="font-size:12px;color:var(--subtext)">共 {{ formatRentDays(scope.row.rentOrderId) }} 天</div>
+                <div>{{ rentPeriod(scope.row) }}</div>
+                <div style="font-size:12px;color:var(--subtext)">共 {{ rentDays(scope.row) }} 天</div>
               </template>
             </el-table-column>
             <el-table-column prop="actualReturnTime" label="还车时间" width="170" />
@@ -225,7 +196,19 @@ onMounted(loadData)
           </el-table>
         </div>
 
-      <el-dialog v-model="confirmDialog" title="确认还车" width="520px">
+        <div v-if="total > pageSize" class="pagination-wrap">
+          <el-pagination
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
+            :total="total"
+            :page-sizes="[10, 20, 50]"
+            layout="total, sizes, prev, pager, next"
+            @current-change="handlePageChange"
+            @size-change="handleSizeChange"
+          />
+        </div>
+
+      <el-dialog v-model="confirmDialog" title="确认还车" width="520px" append-to-body>
         <div v-if="currentReturnOrder" class="confirm-info">
           <div class="confirm-info-row">
             <span>车辆</span>
@@ -239,9 +222,9 @@ onMounted(loadData)
             <span>损坏说明</span>
             <strong>{{ currentReturnOrder.damageDesc || '无' }}</strong>
           </div>
-          <div class="confirm-info-row" v-if="currentReturnRent">
+          <div class="confirm-info-row" v-if="currentReturnOrder.rentOrderBrief">
             <span>原订单租金</span>
-            <strong>￥{{ currentReturnRent.totalPrice || 0 }}</strong>
+            <strong>￥{{ currentReturnOrder.rentOrderBrief.totalPrice || 0 }}</strong>
           </div>
         </div>
         <el-form label-width="90px" style="margin-top:16px">
@@ -257,6 +240,12 @@ onMounted(loadData)
 </template>
 
 <style scoped>
+.pagination-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
 .confirm-info {
   padding: 16px;
   border-radius: 14px;

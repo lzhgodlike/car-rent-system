@@ -10,18 +10,15 @@ const records = ref([])
 const cars = ref([])
 const form = reactive({ carId: null, faultContent: '' })
 const dialogVisible = ref(false)
-const handleForm = reactive({ handleResult: '' })
 const currentId = ref(null)
 const loading = ref(false)
 
 const currentPage = ref(1)
 const pageSize = ref(10)
-const paginatedRecords = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return records.value.slice(start, start + pageSize.value)
-})
-const handlePageChange = (page) => { currentPage.value = page }
-const handleSizeChange = (size) => { pageSize.value = size; currentPage.value = 1 }
+const total = ref(0)
+const summary = ref({})
+const handlePageChange = (page) => { currentPage.value = page; loadData() }
+const handleSizeChange = (size) => { pageSize.value = size; currentPage.value = 1; loadData() }
 
 const handleConfirmVisible = ref(false)
 const pendingRow = ref(null)
@@ -32,10 +29,6 @@ const faultStatusMap = {
   RESOLVED: '已修复',
 }
 
-const pendingCount = computed(() => records.value.filter((item) => item.faultStatus === 'PENDING').length)
-const repairingCount = computed(() => records.value.filter((item) => item.faultStatus === 'REPAIRING').length)
-const resolvedCount = computed(() => records.value.filter((item) => item.faultStatus === 'RESOLVED').length)
-
 const formatFaultStatus = (status) => faultStatusMap[status] || status || '-'
 const statusTone = (status) => {
   if (status === 'PENDING') return 'warning'
@@ -43,44 +36,47 @@ const statusTone = (status) => {
   return 'success'
 }
 
+const myRentedCarIds = ref(new Set())
+
 const loadData = async () => {
   loading.value = true
   try {
-    const [recordData, carData] = await Promise.all([request.get('/fault-reports'), request.get('/cars')])
-    records.value = recordData
-    cars.value = carData
+    const requests = [
+      request.get('/fault-reports', { params: { pageNum: currentPage.value, pageSize: pageSize.value } }),
+      request.get('/cars', { params: { pageNum: 1, pageSize: 9999 } }),
+    ]
+    if (!isAdmin.value) {
+      requests.push(request.get('/rent-orders', { params: { pageNum: 1, pageSize: 9999 } }))
+    }
+    const [recordPage, carPage, orderPage] = await Promise.all(requests)
+    records.value = recordPage.records
+    total.value = recordPage.total
+    summary.value = recordPage.summary || {}
+    cars.value = carPage.records
+    if (!isAdmin.value && orderPage) {
+      myRentedCarIds.value = new Set(orderPage.records.map(o => o.carId))
+    }
   } finally {
     loading.value = false
   }
 }
 
-const carNoMap = computed(() => {
-  const map = new Map()
-  cars.value.forEach((car) => {
-    map.set(car.id, car.carNo)
-  })
-  return map
+const reportableCars = computed(() => {
+  if (isAdmin.value) return cars.value
+  return cars.value.filter(c => myRentedCarIds.value.has(c.id))
 })
-
-const formatCarNo = (carId) => carNoMap.value.get(carId) || carId || '-'
 
 const carStatusMap = { AVAILABLE: '空闲可租', RENTED: '已出租', MAINTENANCE: '检修中' }
 const carStatusTone = { AVAILABLE: 'success', RENTED: 'warning', MAINTENANCE: 'danger' }
 
-const getCar = (carId) => cars.value.find((c) => c.id === carId) || null
-const formatCarName = (carId) => {
-  const car = getCar(carId)
-  if (!car) return '-'
-  return `${car.brand || ''} ${car.model || ''}`.trim() || '-'
+const carName = (row) => {
+  const c = row.carInfo
+  if (!c) return '-'
+  return `${c.brand || ''} ${c.model || ''}`.trim() || '-'
 }
-const formatCarStatus = (carId) => {
-  const car = getCar(carId)
-  return carStatusMap[car?.status] || '-'
-}
-const formatCarStatusTone = (carId) => {
-  const car = getCar(carId)
-  return carStatusTone[car?.status] || 'neutral'
-}
+const carNo = (row) => row.carInfo?.carNo || '-'
+const carStatus = (row) => carStatusMap[row.carInfo?.status] || '-'
+const carStatusToneFn = (row) => carStatusTone[row.carInfo?.status] || 'neutral'
 
 const submitFault = async () => {
   await request.post('/fault-reports', form)
@@ -104,12 +100,10 @@ const doHandleFault = async () => {
 
 const openCompleteRepair = (row) => {
   currentId.value = row.id
-  handleForm.handleResult = row.handleResult || ''
   dialogVisible.value = true
 }
 
 const completeRepair = async () => {
-  await request.put(`/fault-reports/${currentId.value}/handle`, handleForm)
   await request.put(`/fault-reports/${currentId.value}/complete-repair`)
   ElMessage.success('维修完成，车辆已恢复为空闲状态')
   dialogVisible.value = false
@@ -126,10 +120,10 @@ onMounted(loadData)
       <h1 class="hero-title">车况工单</h1>
       <p class="hero-desc">把故障上报、维修处理中和维修完成的状态放在一个工作台里，方便快速安排车辆维修。</p>
       <div class="metric-strip">
-        <div class="metric-pill"><span>工单总数</span><strong>{{ records.length }}</strong></div>
-        <div class="metric-pill"><span>待处理</span><strong>{{ pendingCount }}</strong></div>
-        <div class="metric-pill"><span>维修中</span><strong>{{ repairingCount }}</strong></div>
-        <div class="metric-pill"><span>已修复</span><strong>{{ resolvedCount }}</strong></div>
+        <div class="metric-pill"><span>工单总数</span><strong>{{ total }}</strong></div>
+        <div class="metric-pill"><span>待处理</span><strong>{{ summary.pending ?? 0 }}</strong></div>
+        <div class="metric-pill"><span>维修中</span><strong>{{ summary.repairing ?? 0 }}</strong></div>
+        <div class="metric-pill"><span>已修复</span><strong>{{ summary.resolved ?? 0 }}</strong></div>
       </div>
     </section>
 
@@ -146,7 +140,7 @@ onMounted(loadData)
             <el-form-item label="车辆编号">
               <el-select v-model="form.carId" placeholder="请选择车辆" style="width: 260px">
                 <el-option
-                  v-for="item in cars"
+                  v-for="item in reportableCars"
                   :key="item.id"
                   :label="`${item.carNo} / ${item.brand} ${item.model}`"
                   :value="item.id"
@@ -168,17 +162,17 @@ onMounted(loadData)
         </div>
 
         <div class="table-shell">
-          <el-table :data="paginatedRecords" stripe>
+          <el-table :data="records" stripe>
             <el-table-column label="车辆" min-width="180">
               <template #default="scope">
-                <div>{{ formatCarName(scope.row.carId) }}</div>
-                <div style="font-size:12px;color:var(--subtext)">{{ formatCarNo(scope.row.carId) }}</div>
+                <div>{{ carName(scope.row) }}</div>
+                <div style="font-size:12px;color:var(--subtext)">{{ carNo(scope.row) }}</div>
               </template>
             </el-table-column>
             <el-table-column label="车辆状态" width="110">
               <template #default="scope">
-                <span class="status-badge" :class="formatCarStatusTone(scope.row.carId)">
-                  {{ formatCarStatus(scope.row.carId) }}
+                <span class="status-badge" :class="carStatusToneFn(scope.row)">
+                  {{ carStatus(scope.row) }}
                 </span>
               </template>
             </el-table-column>
@@ -207,11 +201,11 @@ onMounted(loadData)
           </el-table>
         </div>
 
-        <div v-if="records.length > pageSize" class="pagination-wrap">
+        <div v-if="total > pageSize" class="pagination-wrap">
           <el-pagination
             v-model:current-page="currentPage"
             v-model:page-size="pageSize"
-            :total="records.length"
+            :total="total"
             :page-sizes="[10, 20, 50]"
             layout="total, sizes, prev, pager, next"
             @current-change="handlePageChange"
@@ -221,9 +215,7 @@ onMounted(loadData)
       </div>
 
       <el-dialog v-model="dialogVisible" title="完成维修" width="420px">
-        <el-form label-width="90px">
-          <el-form-item label="处理结果"><el-input v-model="handleForm.handleResult" type="textarea" :rows="4" /></el-form-item>
-        </el-form>
+        <p style="color:var(--subtext);font-size:14px;">确认后车辆将恢复为"空闲可租"状态。</p>
         <template #footer>
           <el-button @click="dialogVisible = false">取消</el-button>
           <el-button type="primary" @click="completeRepair">确认完成</el-button>
@@ -234,7 +226,7 @@ onMounted(loadData)
         <div v-if="pendingRow" class="handle-confirm-info">
           <div class="handle-confirm-row">
             <span>车辆</span>
-            <strong>{{ formatCarName(pendingRow.carId) }} ({{ formatCarNo(pendingRow.carId) }})</strong>
+            <strong>{{ carName(pendingRow) }} ({{ carNo(pendingRow) }})</strong>
           </div>
           <div class="handle-confirm-row">
             <span>故障内容</span>

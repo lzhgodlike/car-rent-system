@@ -1,5 +1,5 @@
 ﻿<script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '../utils/request'
 import { getAuth } from '../utils/auth'
@@ -8,6 +8,7 @@ const auth = getAuth()
 const isAdmin = computed(() => auth?.userInfo?.role === 'ADMIN')
 const cars = ref([])
 const carTypes = ref([])
+const brands = ref([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const detailVisible = ref(false)
@@ -19,7 +20,7 @@ const rentVisible = ref(false)
 const currentId = ref(null)
 const carFormRef = ref(null)
 const rentFormRef = ref(null)
-const query = reactive({ brand: '', typeId: '', status: '' })
+const query = reactive({ brand: '', typeId: '', status: '', sort: '' })
 const form = reactive({
   carNo: '',
   typeId: '',
@@ -103,22 +104,76 @@ const rentRules = {
 
 const formatCarStatus = (status) => statusMap[status] || status || '-'
 const statusClass = (status) => statusClassMap[status] || 'available'
-const availableCount = computed(() => cars.value.filter((item) => item.status === 'AVAILABLE').length)
-const rentedCount = computed(() => cars.value.filter((item) => item.status === 'RENTED').length)
-const maintenanceCount = computed(() => cars.value.filter((item) => item.status === 'MAINTENANCE').length)
+
+const currentPage = ref(1)
+const pageSize = ref(9)
+const total = ref(0)
+const summary = ref({})
+const loadingMore = ref(false)
+const hasMore = ref(true)
 
 const loadTypes = async () => {
   carTypes.value = await request.get('/car-types')
 }
 
-const loadCars = async () => {
-  loading.value = true
+const loadBrands = async () => {
+  brands.value = await request.get('/cars/brands')
+}
+
+const loadCars = async (append = false) => {
+  if (append) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+    currentPage.value = 1
+  }
   try {
-    cars.value = await request.get('/cars', { params: query })
+    const page = await request.get('/cars', { params: { ...query, pageNum: currentPage.value, pageSize: pageSize.value } })
+    if (append) {
+      cars.value = [...cars.value, ...page.records]
+    } else {
+      cars.value = page.records
+    }
+    total.value = page.total
+    summary.value = page.summary || {}
+    hasMore.value = cars.value.length < page.total
+    if (!append) setupInfiniteScroll()
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
 }
+
+const resetQuery = () => {
+  Object.assign(query, { brand: '', typeId: '', status: '', sort: '' })
+}
+
+watch(query, () => {
+  loadCars()
+}, { deep: true })
+
+// Infinite scroll
+const sentinel = ref(null)
+let observer = null
+
+const setupInfiniteScroll = () => {
+  nextTick(() => {
+    if (observer) observer.disconnect()
+    observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasMore.value && !loading.value && !loadingMore.value) {
+        currentPage.value++
+        loadCars(true)
+      }
+    }, { root: null, rootMargin: '200px' })
+    if (sentinel.value) {
+      observer.observe(sentinel.value)
+    }
+  })
+}
+
+onBeforeUnmount(() => {
+  if (observer) observer.disconnect()
+})
 
 const resetForm = () => {
   Object.assign(form, {
@@ -135,20 +190,23 @@ const resetForm = () => {
   })
 }
 
-const nextCarNo = computed(() => {
+const nextCarNo = ref('CAR001')
+const calcNextCarNo = async () => {
+  const allCars = await request.get('/cars', { params: { pageNum: 1, pageSize: 9999 } })
   let max = 0
-  cars.value.forEach((car) => {
+  allCars.records.forEach((car) => {
     const match = String(car.carNo || '').match(/^([A-Z]+)(\d+)$/)
     if (match) {
       max = Math.max(max, Number(match[2]))
     }
   })
-  return `CAR${String(max + 1).padStart(3, '0')}`
-})
+  nextCarNo.value = `CAR${String(max + 1).padStart(3, '0')}`
+}
 
-const openAdd = () => {
+const openAdd = async () => {
   currentId.value = null
   resetForm()
+  await calcNextCarNo()
   form.carNo = nextCarNo.value
   dialogVisible.value = true
 }
@@ -208,10 +266,8 @@ const placeholderImage = 'https://images.unsplash.com/photo-1492144534655-ae79c9
 const carTypeName = (typeId) => carTypes.value.find((item) => item.id === typeId)?.typeName || '车型待定'
 const displayImage = (car) => car.carImage || placeholderImage
 
-const detailTotalIncome = computed(() =>
-  detailOrders.value.reduce((sum, o) => sum + Number(o.totalPrice || 0), 0).toFixed(2),
-)
-const detailRentCount = computed(() => detailOrders.value.length)
+const detailTotalIncome = computed(() => Number(detailCar.value?.totalIncome ?? 0).toFixed(2))
+const detailRentCount = computed(() => detailCar.value?.rentCount ?? 0)
 const detailFaultCount = computed(() => detailFaults.value.length)
 const detailResolvedFaults = computed(() => detailFaults.value.filter((f) => f.faultStatus === 'RESOLVED').length)
 
@@ -227,12 +283,12 @@ const openDetail = async (car) => {
   detailVisible.value = true
   detailLoading.value = true
   try {
-    const [orders, faults] = await Promise.all([
-      request.get('/rent-orders'),
-      request.get('/fault-reports'),
+    const [ordersPage, faultsPage] = await Promise.all([
+      request.get('/rent-orders', { params: { pageNum: 1, pageSize: 9999, carId: car.id } }),
+      request.get('/fault-reports', { params: { pageNum: 1, pageSize: 9999, carId: car.id } }),
     ])
-    detailOrders.value = orders.filter((o) => o.carId === car.id)
-    detailFaults.value = faults.filter((f) => f.carId === car.id)
+    detailOrders.value = ordersPage.records
+    detailFaults.value = faultsPage.records
   } finally {
     detailLoading.value = false
   }
@@ -244,7 +300,9 @@ const closeDetail = () => {
 
 onMounted(async () => {
   await loadTypes()
+  await loadBrands()
   await loadCars()
+  setupInfiniteScroll()
 })
 </script>
 
@@ -256,27 +314,29 @@ onMounted(async () => {
       <p class="hero-desc">在这里挑车、看图、比配置，也能快速判断车队当前是空闲充足、正在出行还是进入检修状态。</p>
       <div class="metric-strip">
         <div class="metric-pill">
-          <span>当前车辆</span>
-          <strong>{{ cars.length }}</strong>
+          <span>车辆总数</span>
+          <strong>{{ summary.totalCount ?? 0 }}</strong>
         </div>
         <div class="metric-pill">
           <span>可用车辆</span>
-          <strong>{{ availableCount }}</strong>
+          <strong>{{ summary.available ?? 0 }}</strong>
         </div>
         <div class="metric-pill">
           <span>出租中</span>
-          <strong>{{ rentedCount }}</strong>
+          <strong>{{ summary.rented ?? 0 }}</strong>
         </div>
         <div class="metric-pill">
           <span>检修中</span>
-          <strong>{{ maintenanceCount }}</strong>
+          <strong>{{ summary.maintenance ?? 0 }}</strong>
         </div>
       </div>
     </section>
 
     <div class="page-card" v-loading="loading">
       <div class="toolbar toolbar-card">
-        <el-input v-model="query.brand" placeholder="按品牌查询" style="width: 220px" clearable />
+        <el-select v-model="query.brand" placeholder="品牌" style="width: 180px" clearable>
+          <el-option v-for="item in brands" :key="item" :label="item" :value="item" />
+        </el-select>
         <el-select v-model="query.typeId" placeholder="车辆类型" style="width: 180px" clearable>
           <el-option v-for="item in carTypes" :key="item.id" :label="item.typeName" :value="item.id" />
         </el-select>
@@ -285,7 +345,13 @@ onMounted(async () => {
           <el-option label="已出租" value="RENTED" />
           <el-option label="检修中" value="MAINTENANCE" />
         </el-select>
-        <el-button type="primary" plain @click="loadCars">查询</el-button>
+        <el-select v-model="query.sort" placeholder="排序方式" style="width: 180px" clearable>
+          <el-option label="价格从低到高" value="asc" />
+          <el-option label="价格从高到低" value="desc" />
+          <el-option label="出租次数最多" value="rentCount" />
+          <el-option label="累计收入最多" value="totalIncome" />
+        </el-select>
+        <el-button @click="resetQuery">重置</el-button>
         <el-button v-if="isAdmin" type="primary" @click="openAdd">新增车辆</el-button>
       </div>
 
@@ -323,6 +389,14 @@ onMounted(async () => {
                   <span>车型</span>
                   <strong>{{ carTypeName(car.typeId) }}</strong>
                 </div>
+                <div v-if="isAdmin" class="car-meta-item">
+                  <span>出租次数</span>
+                  <strong>{{ car.rentCount ?? 0 }} 次</strong>
+                </div>
+                <div v-if="isAdmin" class="car-meta-item">
+                  <span>累计收入</span>
+                  <strong class="income-value">￥{{ (car.totalIncome ?? 0).toFixed(2) }}</strong>
+                </div>
               </div>
               <div class="car-actions" @click.stop>
                 <el-button v-if="!isAdmin && car.status === 'AVAILABLE'" type="primary" @click="openRent(car)">立即租车</el-button>
@@ -333,6 +407,11 @@ onMounted(async () => {
               </div>
             </div>
           </article>
+        </div>
+
+        <div ref="sentinel" class="scroll-sentinel">
+          <div v-if="loadingMore" class="loading-more">加载中...</div>
+          <div v-else-if="!hasMore && cars.length > 0" class="loading-more">已加载全部 {{ total }} 辆车</div>
         </div>
     </div>
 
@@ -408,13 +487,13 @@ onMounted(async () => {
 
         <div class="detail-section">
           <h4>租车记录</h4>
-          <el-table :data="detailOrders" stripe size="small" max-height="240">
+          <el-table :data="detailOrders" stripe size="small" max-height="360" empty-text="">
             <el-table-column prop="orderNo" label="订单编号" min-width="140" />
             <el-table-column prop="rentDate" label="租车日期" width="110" />
             <el-table-column prop="expectedReturnDate" label="预计还车" width="110" />
             <el-table-column prop="rentDays" label="天数" width="70" />
             <el-table-column label="总租金" width="100">
-              <template #default="{ row }">{{ formatMoney(row.totalPrice) }}</template>
+              <template #default="{ row }">{{ formatMoney(Number(row.totalPrice || 0) + Number(row.extraFee || 0)) }}</template>
             </el-table-column>
             <el-table-column label="状态" width="90">
               <template #default="{ row }">
@@ -429,7 +508,7 @@ onMounted(async () => {
 
         <div class="detail-section">
           <h4>维修记录</h4>
-          <el-table :data="detailFaults" stripe size="small" max-height="200">
+          <el-table :data="detailFaults" stripe size="small" max-height="320" empty-text="">
             <el-table-column prop="faultContent" label="故障内容" />
             <el-table-column label="状态" width="100">
               <template #default="{ row }">
@@ -464,6 +543,21 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.scroll-sentinel {
+  padding: 20px 0;
+  text-align: center;
+}
+
+.loading-more {
+  color: var(--subtext);
+  font-size: 13px;
+}
+
+.income-value {
+  color: #e6a23c;
+  font-weight: 700;
+}
+
 .detail-top {
   display: grid;
   grid-template-columns: 240px 1fr;

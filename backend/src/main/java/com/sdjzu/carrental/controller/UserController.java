@@ -1,6 +1,7 @@
 package com.sdjzu.carrental.controller;
 
 import com.sdjzu.carrental.common.ApiResponse;
+import com.sdjzu.carrental.common.PageResult;
 import com.sdjzu.carrental.model.entity.User;
 import com.sdjzu.carrental.model.request.UserManageRequest;
 import com.sdjzu.carrental.model.request.UserProfileRequest;
@@ -10,9 +11,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
@@ -36,8 +36,9 @@ public class UserController {
     }
 
     @GetMapping
-    public ApiResponse<List<User>> listUsers() {
-        return ApiResponse.success(userService.listUsers());
+    public ApiResponse<PageResult<User>> listUsers(@RequestParam(defaultValue = "1") int pageNum,
+                                                    @RequestParam(defaultValue = "10") int pageSize) {
+        return ApiResponse.success(userService.listUsers(pageNum, pageSize));
     }
 
     @PutMapping("/{id}")

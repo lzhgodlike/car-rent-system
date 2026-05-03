@@ -110,7 +110,7 @@ const handleMouseMove = (event) => {
   const rotateY = ((x - centerX) / centerX) * maxTilt
   const rotateX = -((y - centerY) / centerY) * maxTilt
 
-  card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.006)`
+  card.style.transform = `translateX(-20%) perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.006)`
 }
 
 const handleMouseLeave = () => {
@@ -119,7 +119,7 @@ const handleMouseLeave = () => {
     return
   }
 
-  card.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1)'
+  card.style.transform = 'translateX(-20%) perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1)'
 }
 </script>
 

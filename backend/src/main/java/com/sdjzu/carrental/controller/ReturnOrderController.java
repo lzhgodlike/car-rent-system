@@ -1,6 +1,7 @@
 package com.sdjzu.carrental.controller;
 
 import com.sdjzu.carrental.common.ApiResponse;
+import com.sdjzu.carrental.common.PageResult;
 import com.sdjzu.carrental.model.entity.ReturnOrder;
 import com.sdjzu.carrental.model.request.ReturnConfirmRequest;
 import com.sdjzu.carrental.model.request.ReturnOrderRequest;
@@ -12,9 +13,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/return-orders")
@@ -33,8 +33,9 @@ public class ReturnOrderController {
     }
 
     @GetMapping
-    public ApiResponse<List<ReturnOrder>> list() {
-        return ApiResponse.success(returnOrderService.list());
+    public ApiResponse<PageResult<ReturnOrder>> list(@RequestParam(defaultValue = "1") int pageNum,
+                                                      @RequestParam(defaultValue = "10") int pageSize) {
+        return ApiResponse.success(returnOrderService.list(pageNum, pageSize));
     }
 
     @PutMapping("/{id}/confirm")

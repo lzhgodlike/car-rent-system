@@ -1,6 +1,7 @@
 package com.sdjzu.carrental.controller;
 
 import com.sdjzu.carrental.common.ApiResponse;
+import com.sdjzu.carrental.common.PageResult;
 import com.sdjzu.carrental.model.entity.FaultReport;
 import com.sdjzu.carrental.model.request.FaultHandleRequest;
 import com.sdjzu.carrental.model.request.FaultReportRequest;
@@ -12,9 +13,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/fault-reports")
@@ -33,8 +33,10 @@ public class FaultReportController {
     }
 
     @GetMapping
-    public ApiResponse<List<FaultReport>> list() {
-        return ApiResponse.success(faultReportService.list());
+    public ApiResponse<PageResult<FaultReport>> list(@RequestParam(defaultValue = "1") int pageNum,
+                                                      @RequestParam(defaultValue = "10") int pageSize,
+                                                      @RequestParam(required = false) Long carId) {
+        return ApiResponse.success(faultReportService.list(pageNum, pageSize, carId));
     }
 
     @PutMapping("/{id}/handle")

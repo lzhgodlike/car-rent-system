@@ -1,6 +1,7 @@
 package com.sdjzu.carrental.controller;
 
 import com.sdjzu.carrental.common.ApiResponse;
+import com.sdjzu.carrental.common.PageResult;
 import com.sdjzu.carrental.model.entity.RentOrder;
 import com.sdjzu.carrental.model.request.RentOrderRequest;
 import com.sdjzu.carrental.service.RentOrderService;
@@ -13,8 +14,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/rent-orders")
@@ -33,8 +32,10 @@ public class RentOrderController {
     }
 
     @GetMapping
-    public ApiResponse<List<RentOrder>> list() {
-        return ApiResponse.success(rentOrderService.list());
+    public ApiResponse<PageResult<RentOrder>> list(@RequestParam(defaultValue = "1") int pageNum,
+                                                    @RequestParam(defaultValue = "10") int pageSize,
+                                                    @RequestParam(required = false) Long carId) {
+        return ApiResponse.success(rentOrderService.list(pageNum, pageSize, carId));
     }
 
     @PutMapping("/{id}/status")

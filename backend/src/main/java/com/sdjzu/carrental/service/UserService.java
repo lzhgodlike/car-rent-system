@@ -11,8 +11,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.sdjzu.carrental.common.PageResult;
+
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 @Service
 public class UserService {
@@ -47,11 +49,17 @@ public class UserService {
         userMapper.updateById(user);
     }
 
-    public List<User> listUsers() {
+    public PageResult<User> listUsers(int pageNum, int pageSize) {
         SecurityUtils.requireAdmin();
-        List<User> users = userMapper.selectList(new LambdaQueryWrapper<User>().orderByDesc(User::getId));
-        users.forEach(item -> item.setPassword(null));
-        return users;
+        Page<User> page = userMapper.selectPage(new Page<>(pageNum, pageSize),
+                new LambdaQueryWrapper<User>().orderByDesc(User::getId));
+        page.getRecords().forEach(item -> item.setPassword(null));
+        PageResult<User> result = PageResult.of(page);
+        result.summary("admin", userMapper.selectCount(
+                new LambdaQueryWrapper<User>().eq(User::getRole, "ADMIN")));
+        result.summary("normal", userMapper.selectCount(
+                new LambdaQueryWrapper<User>().ne(User::getRole, "ADMIN")));
+        return result;
     }
 
     public void updateUser(Long id, UserManageRequest request) {

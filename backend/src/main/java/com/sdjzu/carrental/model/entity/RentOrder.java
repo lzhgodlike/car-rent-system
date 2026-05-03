@@ -1,8 +1,10 @@
 package com.sdjzu.carrental.model.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.sdjzu.carrental.model.dto.CarInfo;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -28,4 +30,13 @@ public class RentOrder {
     private String remark;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+
+    @TableField(exist = false)
+    private CarInfo carInfo;
+
+    @TableField(exist = false)
+    private Boolean hasReturnRequest;
+
+    @TableField(exist = false)
+    private java.math.BigDecimal extraFee;
 }
