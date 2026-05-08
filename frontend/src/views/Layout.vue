@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { clearAuth, getAuth } from '../utils/auth'
@@ -35,7 +35,6 @@ const logout = () => {
 <template>
   <div class="layout-shell">
     <aside class="layout-side">
-      <div class="layout-glow"></div>
       <div class="layout-brand">租车管理系统</div>
       <div class="layout-user-card">
         <span class="layout-user-eyebrow">当前登录</span>
@@ -53,7 +52,7 @@ const logout = () => {
       </nav>
     </aside>
 
-    <main class="layout-main layout-main-compact">
+    <main class="layout-main">
       <router-view />
     </main>
   </div>

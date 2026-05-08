@@ -351,10 +351,10 @@ onMounted(loadData)
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 22px;
+  border-radius: var(--radius-sm);
   min-height: 0;
   padding: 18px;
-  background: rgba(255, 248, 240, 0.92);
+  background: var(--gray-100);
 }
 
 .order-detail-cover img {
@@ -386,8 +386,8 @@ onMounted(loadData)
 
 .detail-item {
   padding: 14px 16px;
-  border-radius: 18px;
-  background: rgba(191, 108, 47, 0.06);
+  border-radius: var(--radius-sm);
+  background: var(--gray-50);
 }
 
 .detail-item span {
@@ -418,8 +418,8 @@ onMounted(loadData)
   display: grid;
   place-items: center;
   padding: 0;
-  background: rgba(17, 13, 10, 0.52);
-  backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
 }
 
 .detail-modal {
@@ -429,9 +429,9 @@ onMounted(loadData)
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(248, 240, 230, 0.98));
-  box-shadow: 0 28px 80px rgba(29, 20, 13, 0.28);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
 }
 
 .detail-modal-header,
@@ -445,12 +445,12 @@ onMounted(loadData)
 }
 
 .detail-modal-header {
-  border-bottom: 1px solid rgba(191, 108, 47, 0.12);
+  border-bottom: 1px solid var(--line);
 }
 
 .detail-modal-footer {
   justify-content: flex-end;
-  border-top: 1px solid rgba(191, 108, 47, 0.12);
+  border-top: 1px solid var(--line);
 }
 
 .detail-modal-header h2 {
@@ -465,10 +465,10 @@ onMounted(loadData)
 
 .detail-close {
   border: none;
-  border-radius: 999px;
-  padding: 10px 16px;
-  background: rgba(191, 108, 47, 0.1);
-  color: var(--brand-deep);
+  border-radius: 6px;
+  padding: 8px 14px;
+  background: var(--gray-100);
+  color: var(--gray-600);
   cursor: pointer;
 }
 

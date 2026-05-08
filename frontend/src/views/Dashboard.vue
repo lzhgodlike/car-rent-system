@@ -237,9 +237,9 @@ onBeforeUnmount(() => {
 
 .chart-card {
   padding: 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(139, 106, 43, 0.12);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(241, 244, 248, 0.92));
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--white);
 }
 
 .chart-title {

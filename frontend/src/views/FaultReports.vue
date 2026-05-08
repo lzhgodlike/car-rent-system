@@ -252,8 +252,8 @@ onMounted(loadData)
 
 .handle-confirm-info {
   padding: 16px;
-  border-radius: 14px;
-  background: rgba(191, 108, 47, 0.06);
+  border-radius: var(--radius-sm);
+  background: var(--gray-50);
   display: grid;
   gap: 12px;
 }

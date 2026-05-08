@@ -566,9 +566,9 @@ onMounted(async () => {
 }
 
 .detail-top-img {
-  border-radius: 18px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  background: rgba(255, 248, 240, 0.92);
+  background: var(--gray-100);
 }
 
 .detail-top-img img {
@@ -598,8 +598,8 @@ onMounted(async () => {
 
 .detail-top-meta div {
   padding: 8px 12px;
-  border-radius: 12px;
-  background: rgba(191, 108, 47, 0.06);
+  border-radius: var(--radius-sm);
+  background: var(--gray-50);
 }
 
 .detail-top-meta span {
@@ -622,10 +622,10 @@ onMounted(async () => {
 
 .detail-stat-card {
   padding: 14px;
-  border-radius: 16px;
+  border-radius: var(--radius-sm);
   text-align: center;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(252, 244, 236, 0.92));
-  border: 1px solid rgba(191, 108, 47, 0.12);
+  background: var(--gray-50);
+  border: 1px solid var(--line);
 }
 
 .detail-stat-card span {
@@ -638,7 +638,7 @@ onMounted(async () => {
   display: block;
   margin-top: 6px;
   font-size: 20px;
-  color: var(--brand-deep);
+  color: var(--gray-900);
 }
 
 .detail-section {
@@ -656,9 +656,9 @@ onMounted(async () => {
   text-align: center;
   color: var(--subtext);
   font-size: 13px;
-  border: 1px dashed rgba(191, 108, 47, 0.2);
-  border-radius: 14px;
-  background: rgba(255, 249, 242, 0.5);
+  border: 1px dashed var(--gray-300);
+  border-radius: var(--radius-sm);
+  background: var(--gray-50);
 }
 
 @media (max-width: 680px) {
