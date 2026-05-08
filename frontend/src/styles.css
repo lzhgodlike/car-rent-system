@@ -334,12 +334,9 @@ button, input, select, textarea { font: inherit; }
   border: 1px solid var(--line);
 }
 
-.layout-user-eyebrow,
-.layout-topbar-label {
-  font-size: 11px;
-  color: var(--subtext);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+.layout-user-card strong {
+  font-size: 13px;
+  color: var(--gray-800);
 }
 
 .side-nav {
@@ -361,13 +358,6 @@ button, input, select, textarea { font: inherit; }
   font-weight: 500;
 }
 
-.side-link small {
-  display: block;
-  font-size: 11px;
-  color: var(--gray-400);
-  margin-top: 1px;
-}
-
 .side-link:hover {
   background: var(--gray-100);
   color: var(--gray-800);
@@ -379,8 +369,6 @@ button, input, select, textarea { font: inherit; }
   font-weight: 600;
   border-color: transparent;
 }
-
-.side-link.router-link-active small { color: var(--brand); opacity: 0.7; }
 
 .side-link-button {
   width: 100%;
