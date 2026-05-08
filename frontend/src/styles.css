@@ -29,6 +29,7 @@
   --success: #16a34a;
   --warning: #ca8a04;
   --danger: #dc2626;
+  --blue-bg: #eff6ff;
 
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
   --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
@@ -270,8 +271,8 @@ button, input, select, textarea { font: inherit; }
 .status-badge.danger { background: #fef2f2; color: var(--danger); }
 .status-badge.neutral { background: var(--gray-100); color: var(--gray-600); }
 
-/* Login */
-.login-shell {
+/* Login - new simple style */
+.login-container {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -280,16 +281,7 @@ button, input, select, textarea { font: inherit; }
   background: var(--bg);
 }
 
-.login-hero { display: none; }
-
-.login-panel {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-}
-
-.login-box {
+.login-card {
   width: 100%;
   max-width: 400px;
   padding: 32px;
@@ -299,12 +291,9 @@ button, input, select, textarea { font: inherit; }
   box-shadow: var(--shadow-md);
 }
 
-.login-box-head { margin-bottom: 20px; }
-.login-box-head h2 { margin: 4px 0 6px; font-size: 22px; font-weight: 700; }
-.login-box-head p { margin: 0; color: var(--subtext); font-size: 13px; }
-
-.login-badge { display: none; }
-.login-highlight-grid { display: none; }
+.login-card-head { margin-bottom: 4px; }
+.login-brand { font-size: 20px; font-weight: 700; color: var(--gray-900); }
+.login-subtitle { margin: 4px 0 0; font-size: 13px; color: var(--subtext); }
 
 /* Layout */
 .layout-shell {
@@ -327,8 +316,6 @@ button, input, select, textarea { font: inherit; }
   background: var(--white);
   color: var(--text);
 }
-
-.layout-glow { display: none; }
 
 .layout-brand {
   font-size: 16px;
@@ -707,7 +694,6 @@ button, input, select, textarea { font: inherit; }
   .car-meta { grid-template-columns: 1fr; }
   .showcase-grid { grid-template-columns: repeat(2, 1fr); }
   .page-header, .layout-topbar { align-items: start; flex-direction: column; }
-  .login-shell { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {
