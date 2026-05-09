@@ -66,7 +66,7 @@ const ensureRange = () => {
 
 const buildRentReturnOption = () => ({
   tooltip: { trigger: 'axis' },
-  grid: { left: 12, right: 12, top: 16, bottom: 8, containLabel: true },
+  grid: { left: 12, right: 12, top: 36, bottom: 4, containLabel: true },
   xAxis: {
     type: 'category',
     data: chartData.value.dates || [],
@@ -96,7 +96,8 @@ const buildRentReturnOption = () => ({
     },
   ],
   legend: {
-    bottom: 0,
+    top: 0,
+    right: 0,
     textStyle: { color: '#78716c', fontSize: 11 },
     itemWidth: 8,
     itemHeight: 8,
@@ -104,23 +105,51 @@ const buildRentReturnOption = () => ({
   },
 })
 
-const buildCarStatusOption = () => ({
-  tooltip: { trigger: 'item' },
-  series: [
-    {
-      type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['50%', '45%'],
-      avoidLabelOverlap: false,
-      label: { show: false },
-      data: (chartData.value.carStatus || []).map((item) => ({
-        name: statusLabelMap[item.name] || item.name,
-        value: item.value,
-        itemStyle: { color: statusColorMap[item.name] || '#a8a29e' },
-      })),
-    },
-  ],
-})
+const buildCarStatusOption = () => {
+  const total = (chartData.value.carStatus || []).reduce((sum, item) => sum + item.value, 0)
+  return {
+    tooltip: { trigger: 'item' },
+    graphic: [
+      {
+        type: 'text',
+        left: 'center',
+        top: '40%',
+        style: {
+          text: `${total}`,
+          textAlign: 'center',
+          fill: '#292524',
+          fontSize: 22,
+          fontWeight: 700,
+        },
+      },
+      {
+        type: 'text',
+        left: 'center',
+        top: '52%',
+        style: {
+          text: '辆',
+          textAlign: 'center',
+          fill: '#78716c',
+          fontSize: 12,
+        },
+      },
+    ],
+    series: [
+      {
+        type: 'pie',
+        radius: ['40%', '70%'],
+        center: ['50%', '45%'],
+        avoidLabelOverlap: false,
+        label: { show: false },
+        data: (chartData.value.carStatus || []).map((item) => ({
+          name: statusLabelMap[item.name] || item.name,
+          value: item.value,
+          itemStyle: { color: statusColorMap[item.name] || '#a8a29e' },
+        })),
+      },
+    ],
+  }
+}
 
 const renderCharts = async () => {
   await nextTick()
