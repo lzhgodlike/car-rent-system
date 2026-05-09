@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref, computed } from 'vue'
 import * as echarts from 'echarts'
 import request from '../utils/request'
@@ -15,12 +15,24 @@ let rentReturnChart = null
 let carStatusChart = null
 
 const statusLabelMap = {
-  AVAILABLE: '空闲',
-  RENTED: '出租中',
-  MAINTENANCE: '维修中',
+  AVAILABLE: '空闲可租',
+  RENTED: '已出租',
+  MAINTENANCE: '检修中',
+}
+
+const statusColorMap = {
+  AVAILABLE: '#16a34a',
+  RENTED: '#f59e0b',
+  MAINTENANCE: '#dc2626',
 }
 
 const formattedIncome = computed(() => Number(stats.value.totalIncome || 0).toFixed(2))
+
+const rentalRate = computed(() => {
+  const total = stats.value.carCount || 0
+  const rented = stats.value.rentedCarCount || 0
+  return total > 0 ? Math.round((rented / total) * 100) : 0
+})
 
 const rangeOptions = computed(() => {
   if (period.value === 'month') {
@@ -54,69 +66,58 @@ const ensureRange = () => {
 
 const buildRentReturnOption = () => ({
   tooltip: { trigger: 'axis' },
-  legend: { data: ['租车订单', '还车订单', '收入'] },
-  grid: { left: 16, right: 20, top: 40, bottom: 12, containLabel: true },
-  xAxis: { type: 'category', data: chartData.value.dates || [] },
-  yAxis: [
-    {
-      type: 'value',
-      name: '订单数',
-      minInterval: 1,
-      splitLine: {
-        lineStyle: {
-          color: 'rgba(58, 42, 25, 0.08)',
-        },
-      },
-    },
-    {
-      type: 'value',
-      name: '收入',
-      position: 'right',
-      axisLabel: {
-        formatter: '￥{value}',
-      },
-      splitLine: {
-        show: false,
-      },
-    },
-  ],
+  grid: { left: 12, right: 12, top: 16, bottom: 8, containLabel: true },
+  xAxis: {
+    type: 'category',
+    data: chartData.value.dates || [],
+    axisLine: { lineStyle: { color: '#e7e5e4' } },
+    axisLabel: { color: '#78716c', fontSize: 11 },
+  },
+  yAxis: {
+    type: 'value',
+    minInterval: 1,
+    splitLine: { lineStyle: { color: '#f5f5f4' } },
+    axisLabel: { color: '#a8a29e', fontSize: 11 },
+  },
   series: [
     {
-      name: '租车订单',
-      type: 'line',
-      smooth: true,
-      yAxisIndex: 0,
-      data: chartData.value.rentCounts || [],
-    },
-    {
-      name: '还车订单',
-      type: 'line',
-      smooth: true,
-      yAxisIndex: 0,
-      data: chartData.value.returnCounts || [],
-    },
-    {
-      name: '收入',
+      name: '租车',
       type: 'bar',
-      yAxisIndex: 1,
-      data: chartData.value.totalIncomeSeries || [],
+      data: chartData.value.rentCounts || [],
+      barWidth: '35%',
+      itemStyle: { color: '#b45309', borderRadius: [3, 3, 0, 0] },
+    },
+    {
+      name: '还车',
+      type: 'bar',
+      data: chartData.value.returnCounts || [],
+      barWidth: '35%',
+      itemStyle: { color: '#86efac', borderRadius: [3, 3, 0, 0] },
     },
   ],
+  legend: {
+    bottom: 0,
+    textStyle: { color: '#78716c', fontSize: 11 },
+    itemWidth: 8,
+    itemHeight: 8,
+    itemGap: 16,
+  },
 })
 
 const buildCarStatusOption = () => ({
   tooltip: { trigger: 'item' },
-  legend: { bottom: 0 },
   series: [
     {
       type: 'pie',
-      radius: ['35%', '68%'],
+      radius: ['40%', '70%'],
       center: ['50%', '45%'],
+      avoidLabelOverlap: false,
+      label: { show: false },
       data: (chartData.value.carStatus || []).map((item) => ({
         name: statusLabelMap[item.name] || item.name,
         value: item.value,
+        itemStyle: { color: statusColorMap[item.name] || '#a8a29e' },
       })),
-      label: { formatter: '{b}\n{d}%' },
     },
   ],
 })
@@ -171,56 +172,58 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="page-stack">
-    <section class="hero-panel">
-      <div class="hero-eyebrow">Operations Hub</div>
-      <h1 class="hero-title">运营看板</h1>
-      <p class="hero-desc">把订单趋势、收入变化和车辆状态放在一个视图里，方便你快速判断今天该盯订单、收入还是库存。</p>
-      <div class="metric-strip">
-        <div class="metric-pill">
-          <span>总收入</span>
-          <strong>￥{{ formattedIncome }}</strong>
-        </div>
-        <div class="metric-pill">
-          <span>租赁订单</span>
-          <strong>{{ stats.rentOrderCount || 0 }}</strong>
-        </div>
-        <div class="metric-pill">
-          <span>还车记录</span>
-          <strong>{{ stats.returnOrderCount || 0 }}</strong>
-        </div>
-        <div class="metric-pill">
-          <span>空闲车辆</span>
-          <strong>{{ stats.availableCarCount || 0 }}</strong>
-        </div>
+  <div class="dash-page">
+    <div class="top-row">
+      <div>
+        <h1>运营看板</h1>
+        <p>订单、收入和车队状态概览</p>
       </div>
-    </section>
-
-    <div class="page-card">
-
-      <div class="toolbar toolbar-card">
-        <el-select v-model="period" placeholder="统计维度" style="width: 160px" @change="handlePeriodChange">
+      <div class="top-actions">
+        <el-select v-model="period" size="small" style="width:90px" @change="handlePeriodChange">
           <el-option label="按日" value="day" />
           <el-option label="按月" value="month" />
           <el-option label="按年" value="year" />
         </el-select>
-        <el-select v-model="range" placeholder="时间范围" style="width: 160px" @change="handleRangeChange">
+        <el-select v-model="range" size="small" style="width:100px" @change="handleRangeChange">
           <el-option v-for="item in rangeOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </div>
+    </div>
 
-      <div class="chart-grid">
-        <div class="chart-card">
-          <div class="chart-head">
-            <div class="chart-title">订单与收入趋势</div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">总订单</div>
+        <div class="stat-val">{{ stats.rentOrderCount || 0 }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">总收入</div>
+        <div class="stat-val">￥{{ formattedIncome }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">出租率</div>
+        <div class="stat-val">{{ rentalRate }}%</div>
+        <div class="stat-note">{{ stats.rentedCarCount || 0 }} / {{ stats.carCount || 0 }} 辆在租</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">用户数</div>
+        <div class="stat-val">{{ stats.userCount || 0 }}</div>
+      </div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-box">
+        <div class="chart-box-title">订单趋势</div>
+        <div ref="rentReturnChartRef" class="chart-canvas"></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-box-title">车辆状态分布</div>
+        <div ref="carStatusChartRef" class="chart-canvas-sm"></div>
+        <div class="status-legend">
+          <div class="status-legend-item" v-for="item in (chartData.carStatus || [])" :key="item.name">
+            <span class="status-dot" :style="{ background: statusColorMap[item.name] }"></span>
+            <span class="status-legend-label">{{ statusLabelMap[item.name] || item.name }}</span>
+            <span class="status-legend-val">{{ item.value }} 辆</span>
           </div>
-          <div ref="rentReturnChartRef" class="chart-canvas"></div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-head">
-            <div class="chart-title">车辆状态占比</div>
-          </div>
-          <div ref="carStatusChartRef" class="chart-canvas"></div>
         </div>
       </div>
     </div>
@@ -228,44 +231,128 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.chart-grid {
+.dash-page {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  margin-top: 20px;
+  gap: 20px;
 }
 
-.chart-card {
-  padding: 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line);
-  background: var(--white);
-}
-
-.chart-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.chart-head {
+.top-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 10px;
+  align-items: center;
 }
 
-.chart-head p {
-  margin: 2px 0 0;
-  color: var(--subtext);
+.top-row h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin: 0;
+}
+
+.top-row p {
   font-size: 13px;
+  color: var(--gray-500);
+  margin: 2px 0 0;
+}
+
+.top-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.stat {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.stat-val {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin: 4px 0 2px;
+}
+
+.stat-note {
+  font-size: 11px;
+  color: var(--gray-400);
+}
+
+.chart-row {
+  display: grid;
+  grid-template-columns: 5fr 3fr;
+  gap: 16px;
+}
+
+.chart-box {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.chart-box-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin-bottom: 14px;
 }
 
 .chart-canvas {
   width: 100%;
-  height: 320px;
+  height: 200px;
+}
+
+.chart-canvas-sm {
+  width: 100%;
+  height: 160px;
+}
+
+.status-legend {
+  margin-top: 12px;
+}
+
+.status-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-legend-label {
+  flex: 1;
+  color: var(--gray-600);
+}
+
+.status-legend-val {
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+@media (max-width: 900px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .chart-row { grid-template-columns: 1fr; }
 }
 </style>
-
-
