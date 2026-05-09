@@ -49,15 +49,19 @@ const logout = () => {
           </router-link>
         </template>
 
-        <div class="nav-group-label">业务</div>
-        <router-link v-for="item in menus.business" :key="item.path" :to="item.path" class="side-link">
-          {{ item.label }}
-        </router-link>
+        <div class="nav-group">
+          <div class="nav-group-label">业务</div>
+          <router-link v-for="item in menus.business" :key="item.path" :to="item.path" class="side-link">
+            {{ item.label }}
+          </router-link>
+        </div>
 
-        <div class="nav-group-label">系统</div>
-        <router-link v-for="item in menus.system" :key="item.path" :to="item.path" class="side-link">
-          {{ item.label }}
-        </router-link>
+        <div class="nav-group">
+          <div class="nav-group-label">系统</div>
+          <router-link v-for="item in menus.system" :key="item.path" :to="item.path" class="side-link">
+            {{ item.label }}
+          </router-link>
+        </div>
       </nav>
 
       <div class="nav-spacer"></div>
