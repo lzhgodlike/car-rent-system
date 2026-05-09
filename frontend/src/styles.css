@@ -420,7 +420,7 @@ button, input, select, textarea { font: inherit; }
 }
 
 .layout-topbar h1 { margin: 4px 0 0; font-size: 20px; font-weight: 700; }
-.layout-main > * { min-height: calc(100vh - 100px); }
+.layout-main > * { min-height: auto; }
 
 .table-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .section-label { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--subtext); }
