@@ -28,7 +28,7 @@ public class RentOrderController {
     @PostMapping
     public ApiResponse<Void> create(@Valid @RequestBody RentOrderRequest request) {
         rentOrderService.create(request);
-        return ApiResponse.success("租车成功", null);
+        return ApiResponse.success("下单成功", null);
     }
 
     @GetMapping
@@ -36,6 +36,18 @@ public class RentOrderController {
                                                     @RequestParam(defaultValue = "10") int pageSize,
                                                     @RequestParam(required = false) Long carId) {
         return ApiResponse.success(rentOrderService.list(pageNum, pageSize, carId));
+    }
+
+    @PutMapping("/{id}/pickup")
+    public ApiResponse<Void> pickup(@PathVariable Long id) {
+        rentOrderService.pickup(id);
+        return ApiResponse.success("确认取车成功", null);
+    }
+
+    @PutMapping("/{id}/cancel")
+    public ApiResponse<Void> cancel(@PathVariable Long id) {
+        rentOrderService.cancel(id);
+        return ApiResponse.success("订单已取消", null);
     }
 
     @PutMapping("/{id}/status")

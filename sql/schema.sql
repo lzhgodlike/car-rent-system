@@ -55,7 +55,7 @@ CREATE TABLE rent_order (
     rent_days INT NOT NULL,
     unit_price DECIMAL(10,2) NOT NULL,
     total_price DECIMAL(10,2) NOT NULL,
-    order_status VARCHAR(20) NOT NULL DEFAULT 'RENTED',
+    order_status VARCHAR(20) NOT NULL DEFAULT 'PENDING_PICKUP',
     remark VARCHAR(255),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -87,4 +87,13 @@ CREATE TABLE fault_report (
     handle_time DATETIME,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+DROP TABLE IF EXISTS user_favorite;
+CREATE TABLE user_favorite (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    car_id BIGINT NOT NULL,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_car (user_id, car_id)
 );

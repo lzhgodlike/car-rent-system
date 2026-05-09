@@ -69,6 +69,29 @@ public class UserService {
             throw new BusinessException("用户不存在");
         }
 
+        boolean isSelf = id.equals(SecurityUtils.getUserId());
+
+        // 管理员不能修改自己的角色和状态
+        if (isSelf) {
+            if (StringUtils.hasText(request.getRole()) && !request.getRole().equals(user.getRole())) {
+                throw new BusinessException("不能修改自己的角色");
+            }
+            if (request.getStatus() != null && !request.getStatus().equals(user.getStatus())) {
+                throw new BusinessException("不能修改自己的账号状态");
+            }
+        }
+
+        // 禁用管理员前检查是否是最后一个
+        if (request.getStatus() != null && request.getStatus() == 0
+                && "ADMIN".equalsIgnoreCase(user.getRole())) {
+            Long adminCount = userMapper.selectCount(new LambdaQueryWrapper<User>()
+                    .eq(User::getRole, "ADMIN")
+                    .eq(User::getStatus, 1));
+            if (adminCount != null && adminCount <= 1) {
+                throw new BusinessException("系统至少需要一个启用的管理员，无法禁用");
+            }
+        }
+
         if (StringUtils.hasText(request.getUsername())) {
             User exists = userMapper.selectOne(new LambdaQueryWrapper<User>()
                     .eq(User::getUsername, request.getUsername())
@@ -89,5 +112,25 @@ public class UserService {
             user.setPassword(DigestUtils.md5DigestAsHex(request.getPassword().getBytes(StandardCharsets.UTF_8)));
         }
         userMapper.updateById(user);
+    }
+
+    public void deleteUser(Long id) {
+        SecurityUtils.requireAdmin();
+        if (id.equals(SecurityUtils.getUserId())) {
+            throw new BusinessException("不能删除自己的账号");
+        }
+        User user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        // 如果要删除的是管理员，检查是否是最后一个
+        if ("ADMIN".equalsIgnoreCase(user.getRole())) {
+            Long adminCount = userMapper.selectCount(new LambdaQueryWrapper<User>()
+                    .eq(User::getRole, "ADMIN"));
+            if (adminCount != null && adminCount <= 1) {
+                throw new BusinessException("系统至少需要一个管理员，无法删除");
+            }
+        }
+        userMapper.deleteById(id);
     }
 }

@@ -65,4 +65,16 @@ public class CarController {
         carService.delete(id);
         return ApiResponse.success("删除成功", null);
     }
+
+    @PutMapping("/{id}/disable")
+    public ApiResponse<Void> disable(@PathVariable Long id) {
+        carService.disable(id);
+        return ApiResponse.success("车辆已停用", null);
+    }
+
+    @PutMapping("/{id}/enable")
+    public ApiResponse<Void> enable(@PathVariable Long id) {
+        carService.enable(id);
+        return ApiResponse.success("车辆已启用", null);
+    }
 }

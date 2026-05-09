@@ -1,6 +1,7 @@
 package com.sdjzu.carrental.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sdjzu.carrental.common.BusinessException;
 import com.sdjzu.carrental.common.PageResult;
 import com.sdjzu.carrental.mapper.CarMapper;
@@ -10,8 +11,6 @@ import com.sdjzu.carrental.security.SecurityUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import java.util.List;
 import java.util.Map;
@@ -58,8 +57,11 @@ public class CarService {
         PageResult<Car> result = PageResult.of(page);
         result.summary("totalCount", carMapper.selectCount(null));
         result.summary("available", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "AVAILABLE")));
+        result.summary("reserved", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "RESERVED")));
         result.summary("rented", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "RENTED")));
-        result.summary("maintenance", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "MAINTENANCE")));
+        result.summary("awaitingRepair", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "AWAITING_REPAIR")));
+        result.summary("repairing", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "REPAIRING")));
+        result.summary("disabled", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "DISABLED")));
         return result;
     }
 
@@ -91,22 +93,65 @@ public class CarService {
         SecurityUtils.requireAdmin();
         Car car = new Car();
         BeanUtils.copyProperties(request, car);
-        if (!StringUtils.hasText(car.getStatus())) {
-            car.setStatus("AVAILABLE");
-        }
+        car.setStatus("AVAILABLE");
         carMapper.insert(car);
     }
 
     public void update(Long id, CarRequest request) {
         SecurityUtils.requireAdmin();
+        Car existing = carMapper.selectById(id);
+        if (existing == null) {
+            throw new BusinessException("车辆不存在");
+        }
+        // 不通过此接口修改状态，状态由系统自动推导
         Car car = new Car();
         BeanUtils.copyProperties(request, car);
         car.setId(id);
+        car.setStatus(existing.getStatus()); // 保持原状态
         carMapper.updateById(car);
     }
 
     public void delete(Long id) {
         SecurityUtils.requireAdmin();
+        Car car = carMapper.selectById(id);
+        if (car == null) {
+            throw new BusinessException("车辆不存在");
+        }
+        if (!"AVAILABLE".equals(car.getStatus()) && !"DISABLED".equals(car.getStatus())) {
+            throw new BusinessException("只能删除空闲或停用状态的车辆，当前状态: " + car.getStatus());
+        }
         carMapper.deleteById(id);
+    }
+
+    /**
+     * 管理员停用车辆
+     */
+    public void disable(Long id) {
+        SecurityUtils.requireAdmin();
+        Car car = carMapper.selectById(id);
+        if (car == null) {
+            throw new BusinessException("车辆不存在");
+        }
+        if ("RENTED".equals(car.getStatus()) || "RESERVED".equals(car.getStatus())) {
+            throw new BusinessException("车辆正在租赁中，无法停用");
+        }
+        car.setStatus("DISABLED");
+        carMapper.updateById(car);
+    }
+
+    /**
+     * 管理员启用车辆（恢复为空闲，后续由系统根据订单/工单自动推导）
+     */
+    public void enable(Long id) {
+        SecurityUtils.requireAdmin();
+        Car car = carMapper.selectById(id);
+        if (car == null) {
+            throw new BusinessException("车辆不存在");
+        }
+        if (!"DISABLED".equals(car.getStatus())) {
+            throw new BusinessException("只有停用状态的车辆才能启用");
+        }
+        car.setStatus("AVAILABLE");
+        carMapper.updateById(car);
     }
 }

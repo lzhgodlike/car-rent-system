@@ -48,6 +48,12 @@ public class FaultReportController {
     @PutMapping("/{id}/complete-repair")
     public ApiResponse<Void> completeRepair(@PathVariable Long id) {
         faultReportService.completeRepair(id);
-        return ApiResponse.success("维修完成，车辆已恢复为空闲状态", null);
+        return ApiResponse.success("维修完成", null);
+    }
+
+    @PutMapping("/{id}/reject")
+    public ApiResponse<Void> reject(@PathVariable Long id, @Valid @RequestBody FaultHandleRequest request) {
+        faultReportService.reject(id, request);
+        return ApiResponse.success("故障报告已拒绝", null);
     }
 }

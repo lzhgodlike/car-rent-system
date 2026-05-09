@@ -50,13 +50,16 @@ public class DashboardService {
         data.put("userCount", userMapper.selectCount(null));
         data.put("carCount", carMapper.selectCount(null));
         data.put("availableCarCount", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "AVAILABLE")));
+        data.put("reservedCarCount", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "RESERVED")));
         data.put("rentedCarCount", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "RENTED")));
-        data.put("maintenanceCarCount", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "MAINTENANCE")));
+        data.put("awaitingRepairCarCount", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "AWAITING_REPAIR")));
+        data.put("repairingCarCount", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "REPAIRING")));
+        data.put("disabledCarCount", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "DISABLED")));
         data.put("rentOrderCount", rentOrderMapper.selectCount(null));
         data.put("returnOrderCount", returnOrderMapper.selectCount(null));
         data.put("faultReportCount", faultReportMapper.selectCount(null));
         data.put("pendingFaultCount", faultReportMapper.selectCount(new LambdaQueryWrapper<FaultReport>().eq(FaultReport::getFaultStatus, "PENDING")));
-        data.put("activeRentCount", rentOrderMapper.selectCount(new LambdaQueryWrapper<RentOrder>().eq(RentOrder::getOrderStatus, "RENTED")));
+        data.put("activeRentCount", rentOrderMapper.selectCount(new LambdaQueryWrapper<RentOrder>().in(RentOrder::getOrderStatus, "PENDING_PICKUP", "RENTED", "RETURN_PENDING")));
         data.put("confirmedReturnCount", returnOrderMapper.selectCount(new LambdaQueryWrapper<ReturnOrder>().eq(ReturnOrder::getStatus, "CONFIRMED")));
 
         BigDecimal rentIncome = BigDecimal.ZERO;
@@ -257,24 +260,19 @@ public class DashboardService {
         }
 
         long availableCount = carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "AVAILABLE"));
+        long reservedCount = carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "RESERVED"));
         long rentedCount = carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "RENTED"));
-        long maintenanceCount = carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "MAINTENANCE"));
+        long awaitingRepairCount = carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "AWAITING_REPAIR"));
+        long repairingCount = carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "REPAIRING"));
+        long disabledCount = carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "DISABLED"));
 
         List<Map<String, Object>> carStatus = new ArrayList<>();
-        Map<String, Object> available = new HashMap<>();
-        available.put("name", "AVAILABLE");
-        available.put("value", availableCount);
-        carStatus.add(available);
-
-        Map<String, Object> rented = new HashMap<>();
-        rented.put("name", "RENTED");
-        rented.put("value", rentedCount);
-        carStatus.add(rented);
-
-        Map<String, Object> maintenance = new HashMap<>();
-        maintenance.put("name", "MAINTENANCE");
-        maintenance.put("value", maintenanceCount);
-        carStatus.add(maintenance);
+        addCarStatusItem(carStatus, "AVAILABLE", availableCount);
+        addCarStatusItem(carStatus, "RESERVED", reservedCount);
+        addCarStatusItem(carStatus, "RENTED", rentedCount);
+        addCarStatusItem(carStatus, "AWAITING_REPAIR", awaitingRepairCount);
+        addCarStatusItem(carStatus, "REPAIRING", repairingCount);
+        addCarStatusItem(carStatus, "DISABLED", disabledCount);
 
         Map<String, Object> data = new HashMap<>();
         data.put("dates", dates);
@@ -285,5 +283,12 @@ public class DashboardService {
         data.put("totalIncomeSeries", totalIncomeSeries);
         data.put("carStatus", carStatus);
         return data;
+    }
+
+    private void addCarStatusItem(List<Map<String, Object>> list, String name, long value) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("name", name);
+        item.put("value", value);
+        list.add(item);
     }
 }

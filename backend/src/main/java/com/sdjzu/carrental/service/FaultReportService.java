@@ -1,7 +1,9 @@
 package com.sdjzu.carrental.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sdjzu.carrental.common.BusinessException;
+import com.sdjzu.carrental.common.PageResult;
 import com.sdjzu.carrental.mapper.CarMapper;
 import com.sdjzu.carrental.mapper.FaultReportMapper;
 import com.sdjzu.carrental.mapper.RentOrderMapper;
@@ -14,9 +16,7 @@ import com.sdjzu.carrental.model.request.FaultReportRequest;
 import com.sdjzu.carrental.security.SecurityUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
-
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.sdjzu.carrental.common.PageResult;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,13 +29,17 @@ public class FaultReportService {
     private final FaultReportMapper faultReportMapper;
     private final CarMapper carMapper;
     private final RentOrderMapper rentOrderMapper;
+    private final RentOrderService rentOrderService;
 
-    public FaultReportService(FaultReportMapper faultReportMapper, CarMapper carMapper, RentOrderMapper rentOrderMapper) {
+    public FaultReportService(FaultReportMapper faultReportMapper, CarMapper carMapper,
+                              RentOrderMapper rentOrderMapper, RentOrderService rentOrderService) {
         this.faultReportMapper = faultReportMapper;
         this.carMapper = carMapper;
         this.rentOrderMapper = rentOrderMapper;
+        this.rentOrderService = rentOrderService;
     }
 
+    @Transactional
     public void create(FaultReportRequest request) {
         if (!SecurityUtils.isAdmin()) {
             Long count = rentOrderMapper.selectCount(new LambdaQueryWrapper<RentOrder>()
@@ -52,6 +56,9 @@ public class FaultReportService {
         faultReport.setFaultStatus("PENDING");
         faultReport.setReportTime(LocalDateTime.now());
         faultReportMapper.insert(faultReport);
+
+        // 重新推导车辆状态
+        rentOrderService.recalculateCarStatus(request.getCarId());
     }
 
     public PageResult<FaultReport> list(int pageNum, int pageSize, Long carId) {
@@ -96,49 +103,65 @@ public class FaultReportService {
         }
     }
 
+    /**
+     * 管理员处理故障：PENDING → REPAIRING，车辆状态自动推导
+     */
+    @Transactional
     public void handle(Long id, FaultHandleRequest request) {
         SecurityUtils.requireAdmin();
         FaultReport faultReport = faultReportMapper.selectById(id);
         if (faultReport == null) {
             throw new BusinessException("故障记录不存在");
         }
+        if (!"PENDING".equals(faultReport.getFaultStatus())) {
+            throw new BusinessException("当前故障记录不处于待处理状态");
+        }
         faultReport.setFaultStatus("REPAIRING");
         faultReport.setHandleResult(request.getHandleResult());
         faultReport.setHandleTime(LocalDateTime.now());
         faultReportMapper.updateById(faultReport);
 
-        Car car = carMapper.selectById(faultReport.getCarId());
-        if (car != null) {
-            car.setStatus("MAINTENANCE");
-            carMapper.updateById(car);
-        }
+        rentOrderService.recalculateCarStatus(faultReport.getCarId());
     }
 
+    /**
+     * 管理员完成维修：REPAIRING → RESOLVED，车辆状态自动推导
+     */
+    @Transactional
     public void completeRepair(Long id) {
         SecurityUtils.requireAdmin();
         FaultReport faultReport = faultReportMapper.selectById(id);
         if (faultReport == null) {
             throw new BusinessException("故障记录不存在");
         }
-        if (!"REPAIRING".equals(faultReport.getFaultStatus()) && !"RESOLVED".equals(faultReport.getFaultStatus())) {
-            throw new BusinessException("当前故障记录不处于可完修状态");
-        }
-
-        Car car = carMapper.selectById(faultReport.getCarId());
-        if (car == null) {
-            throw new BusinessException("关联车辆不存在");
+        if (!"REPAIRING".equals(faultReport.getFaultStatus())) {
+            throw new BusinessException("当前故障记录不处于维修中状态");
         }
 
         faultReport.setFaultStatus("RESOLVED");
         faultReportMapper.updateById(faultReport);
 
-        Long openFaults = faultReportMapper.selectCount(new LambdaQueryWrapper<FaultReport>()
-                .eq(FaultReport::getCarId, faultReport.getCarId())
-                .ne(FaultReport::getId, id)
-                .in(FaultReport::getFaultStatus, "PENDING", "REPAIRING"));
-        if (openFaults == null || openFaults == 0) {
-            car.setStatus("AVAILABLE");
-            carMapper.updateById(car);
+        rentOrderService.recalculateCarStatus(faultReport.getCarId());
+    }
+
+    /**
+     * 管理员拒绝故障报告：PENDING → REJECTED
+     */
+    @Transactional
+    public void reject(Long id, FaultHandleRequest request) {
+        SecurityUtils.requireAdmin();
+        FaultReport faultReport = faultReportMapper.selectById(id);
+        if (faultReport == null) {
+            throw new BusinessException("故障记录不存在");
         }
+        if (!"PENDING".equals(faultReport.getFaultStatus())) {
+            throw new BusinessException("只能拒绝待处理的故障报告");
+        }
+        faultReport.setFaultStatus("REJECTED");
+        faultReport.setHandleResult(request.getHandleResult());
+        faultReport.setHandleTime(LocalDateTime.now());
+        faultReportMapper.updateById(faultReport);
+
+        rentOrderService.recalculateCarStatus(faultReport.getCarId());
     }
 }

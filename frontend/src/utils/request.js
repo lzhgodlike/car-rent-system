@@ -10,21 +10,24 @@ const request = axios.create({
 
 let redirectedForAuth = false
 
+function isPublicPage() {
+  const path = router.currentRoute.value?.path || ''
+  return path === '/home' || path === '/book' || path === '/login' || path === '/'
+}
+
 function redirectToLogin(message = '登录已失效，请重新登录') {
   clearAuth()
-  if (!redirectedForAuth) {
+  if (!redirectedForAuth && !isPublicPage()) {
     redirectedForAuth = true
     ElMessage.error(message)
-    router.replace('/login').finally(() => {
+    router.replace({ path: '/home', query: { login: 1 } }).finally(() => {
       redirectedForAuth = false
     })
   }
 }
 
 function isAuthExpired(message, status) {
-  if (status === 401) {
-    return true
-  }
+  if (status === 401) return true
   return typeof message === 'string' && (
     message.includes('UNAUTHORIZED') ||
     message.includes('未登录') ||
@@ -38,8 +41,9 @@ request.interceptors.request.use((config) => {
   const auth = getAuth()
   if (auth?.token) {
     if (isTokenExpired(auth.token)) {
-      redirectToLogin()
-      return Promise.reject(new Error('登录已失效，请重新登录'))
+      // Token 过期：清除本地存储，但不跳转，让请求以无 token 方式继续
+      clearAuth()
+      return config
     }
     config.headers.Authorization = `Bearer ${auth.token}`
   }
@@ -65,6 +69,10 @@ request.interceptors.response.use(
     const message = error.response?.data?.message || error.message || '网络异常'
     if (isAuthExpired(message, status)) {
       redirectToLogin()
+      return Promise.reject(error)
+    }
+    // 公开页面的 401 不弹错误提示
+    if (isPublicPage() && status === 401) {
       return Promise.reject(error)
     }
     ElMessage.error(message)

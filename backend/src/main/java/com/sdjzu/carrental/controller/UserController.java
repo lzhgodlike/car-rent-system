@@ -6,6 +6,7 @@ import com.sdjzu.carrental.model.entity.User;
 import com.sdjzu.carrental.model.request.UserManageRequest;
 import com.sdjzu.carrental.model.request.UserProfileRequest;
 import com.sdjzu.carrental.service.UserService;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -45,5 +46,11 @@ public class UserController {
     public ApiResponse<Void> updateUser(@PathVariable Long id, @RequestBody UserManageRequest request) {
         userService.updateUser(id, request);
         return ApiResponse.success("修改成功", null);
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> deleteUser(@PathVariable Long id) {
+        userService.deleteUser(id);
+        return ApiResponse.success("删除成功", null);
     }
 }
