@@ -59,11 +59,14 @@ public class DashboardService {
         data.put("returnOrderCount", returnOrderMapper.selectCount(null));
         data.put("faultReportCount", faultReportMapper.selectCount(null));
         data.put("pendingFaultCount", faultReportMapper.selectCount(new LambdaQueryWrapper<FaultReport>().eq(FaultReport::getFaultStatus, "PENDING")));
+        data.put("pendingPickupCount", rentOrderMapper.selectCount(new LambdaQueryWrapper<RentOrder>().eq(RentOrder::getOrderStatus, "PENDING_PICKUP")));
+        data.put("pendingReturnCount", rentOrderMapper.selectCount(new LambdaQueryWrapper<RentOrder>().eq(RentOrder::getOrderStatus, "RETURN_PENDING")));
         data.put("activeRentCount", rentOrderMapper.selectCount(new LambdaQueryWrapper<RentOrder>().in(RentOrder::getOrderStatus, "PENDING_PICKUP", "RENTED", "RETURN_PENDING")));
         data.put("confirmedReturnCount", returnOrderMapper.selectCount(new LambdaQueryWrapper<ReturnOrder>().eq(ReturnOrder::getStatus, "CONFIRMED")));
 
         BigDecimal rentIncome = BigDecimal.ZERO;
-        for (RentOrder order : rentOrderMapper.selectList(null)) {
+        for (RentOrder order : rentOrderMapper.selectList(
+                new LambdaQueryWrapper<RentOrder>().ne(RentOrder::getOrderStatus, "CANCELLED"))) {
             if (order.getTotalPrice() != null) {
                 rentIncome = rentIncome.add(order.getTotalPrice());
             }
@@ -140,7 +143,8 @@ public class DashboardService {
             }
         }
 
-        List<RentOrder> rentOrders = rentOrderMapper.selectList(new LambdaQueryWrapper<RentOrder>());
+        List<RentOrder> rentOrders = rentOrderMapper.selectList(
+                new LambdaQueryWrapper<RentOrder>().ne(RentOrder::getOrderStatus, "CANCELLED"));
         Map<String, Long> rentCountByKey = new HashMap<>();
         Map<String, BigDecimal> rentIncomeByKey = new HashMap<>();
         LocalDate minDate = null;
@@ -290,5 +294,30 @@ public class DashboardService {
         item.put("name", name);
         item.put("value", value);
         list.add(item);
+    }
+
+    public Map<String, Object> pendingItems() {
+        SecurityUtils.requireAdmin();
+        Map<String, Object> data = new HashMap<>();
+
+        // 待取车订单
+        List<RentOrder> pendingPickups = rentOrderMapper.selectList(
+                new LambdaQueryWrapper<RentOrder>().eq(RentOrder::getOrderStatus, "PENDING_PICKUP").orderByDesc(RentOrder::getId));
+        data.put("pendingPickups", pendingPickups);
+        data.put("pendingPickupCount", pendingPickups.size());
+
+        // 待确认还车
+        List<RentOrder> pendingReturns = rentOrderMapper.selectList(
+                new LambdaQueryWrapper<RentOrder>().eq(RentOrder::getOrderStatus, "RETURN_PENDING").orderByDesc(RentOrder::getId));
+        data.put("pendingReturns", pendingReturns);
+        data.put("pendingReturnCount", pendingReturns.size());
+
+        // 待处理故障（待处理 + 维修中）
+        List<FaultReport> pendingFaults = faultReportMapper.selectList(
+                new LambdaQueryWrapper<FaultReport>().in(FaultReport::getFaultStatus, "PENDING", "REPAIRING").orderByDesc(FaultReport::getId));
+        data.put("pendingFaults", pendingFaults);
+        data.put("pendingFaultCount", pendingFaults.size());
+
+        return data;
     }
 }

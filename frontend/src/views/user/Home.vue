@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
@@ -36,22 +36,28 @@ const carTypes = ref([])
 const totalCount = ref(0)
 const detailVisible = ref(false)
 const detailCar = ref(null)
+const showBackToTop = ref(false)
+const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
 
 const today = new Date().toISOString().split('T')[0]
 const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
 const searchForm = ref({ city: '郑州市', pickDate: today, dropDate: tomorrow, typeId: '' })
 const { isLoggedIn } = useAuth()
 
+const onScroll = () => { showBackToTop.value = window.scrollY > 300 }
+
 onMounted(async () => {
   pageReady.value = false
   await nextTick()
   pageReady.value = true
   carTypes.value = await request.get('/car-types')
-  const page = await request.get('/cars', { params: { pageNum: 1, pageSize: 6, sort: 'rentCount' } })
+  const page = await request.get('/cars', { params: { pageNum: 1, pageSize: 6, sort: 'rentCount', status: 'AVAILABLE' } })
   cars.value = page.records
   totalCount.value = page.total
   if (isLoggedIn.value) loadFavorites()
+  window.addEventListener('scroll', onScroll, { passive: true })
 })
+onUnmounted(() => { window.removeEventListener('scroll', onScroll) })
 
 const carTypeName = (typeId) => carTypes.value.find(t => t.id === typeId)?.typeName || '-'
 const openDetail = (car) => { detailCar.value = car; detailVisible.value = true }
@@ -118,8 +124,8 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
       <div class="car-grid">
         <div v-for="car in cars" :key="car.id" class="car-card" @click="openDetail(car)">
           <div class="car-img">
-            <img v-if="car.carImage" :src="car.carImage" :alt="`${car.brand} ${car.model}`" @error="(e) => e.target.style.display='none'" />
-            <el-icon v-else size="64" style="color:var(--muted2);"><Van /></el-icon>
+            <div class="car-img-placeholder"><el-icon size="32" style="color:var(--muted2);"><Van /></el-icon></div>
+            <img v-if="car.carImage" :src="car.carImage" :alt="`${car.brand} ${car.model}`" loading="lazy" class="car-img-el" @load="(e) => e.target.classList.add('loaded')" @error="(e) => e.target.style.display='none'" />
             <div class="car-tag">{{ carTypeName(car.typeId) }}</div>
             <div class="car-fav" :class="{ liked: favoriteIds.has(car.id) }" @click.stop="toggleFavorite(car)"><el-icon><Star /></el-icon></div>
           </div>
@@ -134,25 +140,19 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
           </div>
           <div class="car-footer">
             <div class="car-price"><span>¥{{ car.dayPrice }}</span><small>/天</small></div>
-            <div class="car-stars"><el-icon><Star /></el-icon> 4.8<span>(126)</span></div>
+            <button class="btn-book-sm" @click.stop="router.push({ path: '/book', query: { carId: car.id } })">立即预订</button>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Promo -->
-    <section class="promo-banner">
-      <div class="promo-bg"></div><div class="promo-bg2"></div>
-      <div class="promo-content">
-        <h2 class="promo-title">新用户首租<br>立减优惠</h2>
-        <p class="promo-sub">注册即送优惠券，首单专享折扣</p>
-        <div class="promo-actions">
-          <button class="btn-promo btn-promo-light" @click="openLoginModal">立即领取 →</button>
-          <button class="btn-promo btn-promo-outline">了解详情</button>
-        </div>
-      </div>
-      <div class="promo-badge"><div>8折</div><small>首单专享</small></div>
-    </section>
+    <!-- 返回顶部 -->
+    <Transition name="back-top">
+      <button v-if="showBackToTop" class="back-to-top" @click="scrollToTop">
+        <el-icon size="15"><ArrowUp /></el-icon>
+        <span>返回顶部</span>
+      </button>
+    </Transition>
 
     <!-- Footer -->
     <footer class="site-footer">
@@ -201,7 +201,9 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
             <div class="detail-row"><span class="detail-label">取车地址</span><span class="detail-val">{{ detailCar.pickupAddress || '待补充' }}</span></div>
             <div class="detail-row"><span class="detail-label">车辆状态</span><span class="detail-val">{{ detailCar.status === 'AVAILABLE' ? '可用' : detailCar.status }}</span></div>
           </div>
-          <button class="auth-btn" style="margin-top:16px;" @click="detailVisible=false;router.push('/book')">立即预订</button>
+          <button class="detail-book-btn" @click="detailVisible=false;router.push({ path: '/book', query: { carId: detailCar.id } })">
+            <el-icon><Check /></el-icon> 立即预订
+          </button>
         </div>
       </div>
     </div>
@@ -302,15 +304,22 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
   height: 160px; background: var(--bg); display: flex; align-items: center; justify-content: center;
   position: relative; overflow: hidden;
 }
-.car-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
-.car-card:hover .car-img img { transform: scale(1.05); }
+.car-img-placeholder {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 0;
+}
+.car-img-el {
+  width: 100%; height: 100%; object-fit: cover; display: block; position: relative; z-index: 1;
+  opacity: 0; transition: opacity .3s, transform .3s;
+}
+.car-img-el.loaded { opacity: 1; }
+.car-card:hover .car-img-el.loaded { transform: scale(1.05); }
 .car-tag {
-  position: absolute; top: 12px; left: 12px;
+  position: absolute; top: 12px; left: 12px; z-index: 2;
   background: var(--white); border-radius: 6px; padding: 3px 9px;
   font-size: 11px; font-weight: 500; color: var(--text); box-shadow: var(--shadow-sm);
 }
 .car-fav {
-  position: absolute; top: 12px; right: 12px;
+  position: absolute; top: 12px; right: 12px; z-index: 2;
   width: 30px; height: 30px; background: var(--white); border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   box-shadow: var(--shadow-sm); cursor: pointer; transition: all .18s;
@@ -328,35 +337,49 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
 .car-price { font-family: 'Bebas Neue', monospace; }
 .car-price span { font-size: 22px; font-weight: 500; color: var(--accent); }
 .car-price small { font-size: 12px; color: var(--muted); }
-.car-stars { display: flex; align-items: center; gap: 3px; font-size: 12px; color: var(--gold); }
-.car-stars .el-icon { font-size: 13px; }
-.car-stars span { color: var(--muted); margin-left: 2px; }
+.btn-book-sm {
+  padding: 6px 14px; border-radius: 8px; font-size: 12px;
+  font-family: 'Noto Sans SC', sans-serif; cursor: pointer; transition: all .15s;
+  background: var(--accent); border: none; color: #fff; font-weight: 500;
+}
+.btn-book-sm:hover { background: #b02e22; }
 
-/* Promo */
-.promo-banner {
-  margin: 0 40px 60px; max-width: 1120px; margin-left: auto; margin-right: auto;
-  background: linear-gradient(135deg, #1a1a1a 0%, #2e1a0a 100%);
-  border-radius: 20px; padding: 40px 48px;
-  display: flex; align-items: center; justify-content: space-between;
-  position: relative; overflow: hidden;
+/* 详情预订按钮 */
+.detail-book-btn {
+  width: 100%; margin-top: 16px; padding: 14px 24px;
+  background: var(--accent); color: #fff; border: none; border-radius: 14px;
+  font-size: 15px; font-weight: 600; font-family: 'Noto Sans SC', sans-serif;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  box-shadow: 0 6px 20px rgba(200,56,42,0.3); transition: all .2s;
 }
-.promo-bg { position: absolute; right: -40px; top: -40px; width: 280px; height: 280px; border-radius: 50%; background: rgba(200,56,42,0.15); }
-.promo-bg2 { position: absolute; right: 80px; bottom: -60px; width: 180px; height: 180px; border-radius: 50%; background: rgba(196,154,60,0.12); }
-.promo-content { position: relative; z-index: 1; }
-.promo-title { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; color: #fff; line-height: 1.2; }
-.promo-sub { font-size: 14px; color: rgba(255,255,255,0.6); margin-top: 8px; }
-.promo-actions { display: flex; gap: 10px; margin-top: 20px; }
-.btn-promo { padding: 10px 22px; border-radius: 24px; font-size: 13px; font-weight: 500; font-family: 'Noto Sans SC', sans-serif; cursor: pointer; transition: all .18s; display: flex; align-items: center; gap: 6px; border: none; }
-.btn-promo-light { background: #fff; color: #1a1a1a; }
-.btn-promo-outline { background: transparent; color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.3); }
-.btn-promo-outline:hover { border-color: rgba(255,255,255,0.6); color: #fff; }
-.promo-badge {
-  background: var(--accent); color: #fff;
-  font-family: 'Bebas Neue', monospace; font-size: 36px; font-weight: 500;
-  padding: 16px 28px; border-radius: 12px; position: relative; z-index: 1;
-  text-align: center; line-height: 1;
+.detail-book-btn:hover { background: #b02e22; transform: translateY(-1px); box-shadow: 0 8px 28px rgba(200,56,42,0.4); }
+.detail-book-btn:active { transform: translateY(0); box-shadow: 0 4px 12px rgba(200,56,42,0.25); }
+
+/* 返回顶部 - 液态玻璃 */
+.back-to-top {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 150;
+  height: 44px; border: none; border-radius: 28px; padding: 0 24px;
+  cursor: pointer; display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 500; color: var(--text); font-family: 'Noto Sans SC', sans-serif;
+  background: rgba(255,255,255,0.35);
+  backdrop-filter: blur(24px) saturate(1.8) brightness(1.1);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8) brightness(1.1);
+  border-top: 1px solid rgba(255,255,255,0.7);
+  border-left: 1px solid rgba(255,255,255,0.5);
+  border-right: 1px solid rgba(255,255,255,0.3);
+  border-bottom: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(255,255,255,0.2);
+  transition: all .3s cubic-bezier(.34,1.56,.64,1);
 }
-.promo-badge small { display: block; font-size: 12px; margin-top: 4px; font-family: 'Noto Sans SC', sans-serif; }
+.back-to-top::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 50%, rgba(255,255,255,0.1) 100%);
+  pointer-events: none;
+}
+.back-to-top:hover { background: rgba(255,255,255,0.55); transform: translateX(-50%) scale(1.05); box-shadow: 0 12px 40px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.9); }
+.back-to-top:active { transform: translateX(-50%) scale(0.95); background: rgba(255,255,255,0.45); transition-duration: .1s; }
+.back-top-enter-active, .back-top-leave-active { transition: opacity .3s, transform .3s cubic-bezier(.4,0,.2,1); }
+.back-top-enter-from, .back-top-leave-to { opacity: 0; transform: translateX(-50%) translateY(16px); }
 
 /* Footer */
 .site-footer { background: #1a1a1a; color: rgba(255,255,255,0.5); padding: 48px 40px 32px; margin-top: 40px; }

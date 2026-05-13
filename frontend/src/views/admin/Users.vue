@@ -12,14 +12,20 @@ const summary = ref({})
 const dialogVisible = ref(false)
 const currentId = ref(null)
 const form = ref({ username: '', realName: '', phone: '', idCard: '', gender: '', role: 'USER', status: 1, password: '' })
+const filterRole = ref('')
+const filterStatus = ref('')
 
 const loadData = async () => {
   loading.value = true
   try {
-    const page = await request.get('/users', { params: { pageNum: currentPage.value, pageSize: pageSize.value } })
+    const params = { pageNum: currentPage.value, pageSize: pageSize.value }
+    if (filterRole.value) params.role = filterRole.value
+    if (filterStatus.value !== '') params.status = filterStatus.value
+    const page = await request.get('/users', { params })
     users.value = page.records; total.value = page.total; summary.value = page.summary || {}
   } finally { loading.value = false }
 }
+const onFilterChange = () => { currentPage.value = 1; loadData() }
 onMounted(loadData)
 
 const openEdit = (row) => {
@@ -39,12 +45,22 @@ const deleteUser = async (row) => {
 
 <template>
   <div>
-    <div class="summary-strip">
-      <span class="sum-item">用户总数 <strong>{{ total }}</strong></span>
-      <span class="sum-item">管理员 <strong>{{ summary.admin ?? 0 }}</strong></span>
-      <span class="sum-item">普通用户 <strong>{{ summary.normal ?? 0 }}</strong></span>
+    <div class="toolbar">
+      <div class="summary-strip">
+        <span class="sum-item">用户总数 <strong>{{ total }}</strong></span>
+        <span class="sum-item">管理员 <strong>{{ summary.admin ?? 0 }}</strong></span>
+        <span class="sum-item">普通用户 <strong>{{ summary.normal ?? 0 }}</strong></span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <el-select v-model="filterRole" placeholder="角色" clearable size="small" style="width:120px;" @change="onFilterChange">
+          <el-option label="管理员" value="ADMIN" /><el-option label="普通用户" value="USER" />
+        </el-select>
+        <el-select v-model="filterStatus" placeholder="状态" clearable size="small" style="width:100px;" @change="onFilterChange">
+          <el-option label="启用" :value="1" /><el-option label="停用" :value="0" />
+        </el-select>
+      </div>
     </div>
-    <div class="card" style="margin-top:16px;">
+    <div class="card">
       <el-table :data="users" v-loading="loading">
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="username" label="用户名" width="120" />
@@ -60,8 +76,8 @@ const deleteUser = async (row) => {
         </el-table-column>
         <el-table-column label="操作" width="140">
           <template #default="{row}">
-            <el-button size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" plain @click="deleteUser(row)">删除</el-button>
+            <button class="btn-sm btn-sm-ghost" @click="openEdit(row)">编辑</button>
+            <button class="btn-sm btn-sm-danger" @click="deleteUser(row)">删除</button>
           </template>
         </el-table-column>
       </el-table>
@@ -82,14 +98,15 @@ const deleteUser = async (row) => {
         <el-form-item label="新密码"><el-input v-model="form.password" type="password" show-password placeholder="不修改可留空" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveUser">保存</el-button>
+        <button class="btn-sm btn-sm-ghost" @click="dialogVisible = false">取消</button>
+        <button class="btn-sm btn-sm-primary" @click="saveUser">保存</button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <style scoped>
+.toolbar { display: flex; align-items: center; justify-content: space-between; }
 .summary-strip { display: flex; gap: 16px; }
 .sum-item { font-size: 12px; color: var(--muted); }
 .sum-item strong { color: var(--text); margin-left: 4px; }

@@ -22,4 +22,5 @@ mybatis-plus:
 
 jwt:
   secret: car-rental-system-secret-key-for-graduation-project-2026
-  expire-hours: 24
+  expire-minutes: 2
+

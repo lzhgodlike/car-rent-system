@@ -39,20 +39,38 @@ public class UserService {
         if (user == null) {
             throw new BusinessException("用户不存在");
         }
+        // 校验手机号
+        if (StringUtils.hasText(request.getPhone()) && !request.getPhone().matches("^1[3-9]\\d{9}$")) {
+            throw new BusinessException("手机号格式不正确");
+        }
+        // 校验身份证号
+        if (StringUtils.hasText(request.getIdCard()) && !request.getIdCard().matches("^\\d{17}[\\dXx]$")) {
+            throw new BusinessException("身份证号应为18位");
+        }
         user.setRealName(request.getRealName());
         user.setPhone(request.getPhone());
         user.setIdCard(request.getIdCard());
         user.setGender(request.getGender());
         if (StringUtils.hasText(request.getPassword())) {
+            if (!StringUtils.hasText(request.getOldPassword())) {
+                throw new BusinessException("请输入原密码");
+            }
+            String oldPwdHash = DigestUtils.md5DigestAsHex(request.getOldPassword().getBytes(StandardCharsets.UTF_8));
+            if (!oldPwdHash.equals(user.getPassword())) {
+                throw new BusinessException("原密码错误");
+            }
             user.setPassword(DigestUtils.md5DigestAsHex(request.getPassword().getBytes(StandardCharsets.UTF_8)));
         }
         userMapper.updateById(user);
     }
 
-    public PageResult<User> listUsers(int pageNum, int pageSize) {
+    public PageResult<User> listUsers(int pageNum, int pageSize, String role, Integer status) {
         SecurityUtils.requireAdmin();
-        Page<User> page = userMapper.selectPage(new Page<>(pageNum, pageSize),
-                new LambdaQueryWrapper<User>().orderByDesc(User::getId));
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<User>()
+                .eq(StringUtils.hasText(role), User::getRole, role)
+                .eq(status != null, User::getStatus, status)
+                .orderByDesc(User::getId);
+        Page<User> page = userMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
         page.getRecords().forEach(item -> item.setPassword(null));
         PageResult<User> result = PageResult.of(page);
         result.summary("admin", userMapper.selectCount(

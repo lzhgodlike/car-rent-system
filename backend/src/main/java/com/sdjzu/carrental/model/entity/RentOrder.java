@@ -10,6 +10,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @TableName("rent_order")
@@ -35,8 +36,26 @@ public class RentOrder {
     private CarInfo carInfo;
 
     @TableField(exist = false)
+    private String userName;
+
+    @TableField(exist = false)
+    private String userRealName;
+
+    @TableField(exist = false)
+    private String userPhone;
+
+    @TableField(exist = false)
+    private String userIdCard;
+
+    @TableField(exist = false)
+    private ReturnOrder returnOrder;
+
+    @TableField(exist = false)
     private Boolean hasReturnRequest;
 
     @TableField(exist = false)
     private java.math.BigDecimal extraFee;
+
+    @TableField(exist = false)
+    private List<String> availableActions;
 }

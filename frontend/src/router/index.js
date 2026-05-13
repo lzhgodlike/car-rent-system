@@ -42,26 +42,28 @@ router.beforeEach((to, from, next) => {
   const auth = getAuth()
   const token = auth?.token || ''
 
-  // Token 过期 → 清除，跳首页
+  // Token 过期 → 清除
   if (token && isTokenExpired(token)) {
     clearAuth()
-    return next('/home')
   }
 
   const currentAuth = getAuth()
   const requiresAuth = to.matched.some(r => r.meta.requiresAuth)
-  const isPublic = to.matched.some(r => r.meta.public)
+  const requiresAdmin = to.matched.some(r => r.meta.role === 'ADMIN')
 
-  // 需要登录但未登录 → 跳首页并打开登录弹窗
-  if (requiresAuth && !isPublic && !currentAuth) {
-    return next({ path: '/home', query: { login: 1 } })
+  // 管理员页面需要 ADMIN 角色
+  if (requiresAdmin && (!currentAuth || currentAuth.userInfo?.role !== 'ADMIN')) {
+    return next('/home')
   }
 
-  // 管理员访问用户页面 → 跳管理后台
-  if (currentAuth && currentAuth.userInfo?.role === 'ADMIN') {
-    if (!to.path.startsWith('/admin')) {
-      return next('/admin/dashboard')
-    }
+  // 需要登录但未登录 → 跳首页
+  if (requiresAuth && !currentAuth) {
+    return next('/home')
+  }
+
+  // 已登录管理员访问用户页面 → 跳管理后台
+  if (currentAuth && currentAuth.userInfo?.role === 'ADMIN' && !to.path.startsWith('/admin')) {
+    return next('/admin/dashboard')
   }
 
   next()

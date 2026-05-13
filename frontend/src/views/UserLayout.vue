@@ -62,8 +62,8 @@ const handleLogin = async () => {
 }
 
 const handleRegister = async () => {
-  if (!registerForm.value.username || !registerForm.value.password || !registerForm.value.realName) {
-    ElMessage.warning('请填写必填项'); return
+  if (!registerForm.value.username || !registerForm.value.password) {
+    ElMessage.warning('请输入用户名和密码'); return
   }
   registerLoading.value = true
   try {
@@ -153,17 +153,7 @@ const handleRegister = async () => {
         <div class="auth-modal-body">
           <div class="auth-field"><label>用户名</label><input v-model="registerForm.username" placeholder="请输入用户名" /></div>
           <div class="auth-field"><label>密码</label><input v-model="registerForm.password" type="password" placeholder="请输入密码" /></div>
-          <div class="auth-field"><label>真实姓名</label><input v-model="registerForm.realName" placeholder="请输入真实姓名" /></div>
-          <div class="auth-field"><label>手机号</label><input v-model="registerForm.phone" placeholder="请输入手机号" /></div>
-          <div class="auth-field"><label>身份证号</label><input v-model="registerForm.idCard" placeholder="请输入身份证号" /></div>
-          <div class="auth-field">
-            <label>性别</label>
-            <div class="gender-row">
-              <label class="gender-opt" :class="{ active: registerForm.gender === '男' }" @click="registerForm.gender = '男'">男</label>
-              <label class="gender-opt" :class="{ active: registerForm.gender === '女' }" @click="registerForm.gender = '女'">女</label>
-            </div>
-          </div>
-          <button class="auth-btn" :disabled="registerLoading" @click="handleRegister">{{ registerLoading ? '注册中...' : '立即注册 · 领取优惠券' }}</button>
+          <button class="auth-btn" :disabled="registerLoading" @click="handleRegister">{{ registerLoading ? '注册中...' : '立即注册' }}</button>
           <div class="auth-switch">已有账号？<a @click="switchToLoginModal">去登录</a></div>
         </div>
       </div>

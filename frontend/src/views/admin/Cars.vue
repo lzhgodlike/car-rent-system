@@ -65,7 +65,7 @@ const carTypeName = (typeId) => carTypes.value.find(t => t.id === typeId)?.typeN
           <el-option v-for="(label, key) in statusMap" :key="key" :label="label" :value="key" />
         </el-select>
       </div>
-      <el-button type="primary" size="small" @click="openAdd"><el-icon><Plus /></el-icon> 添加车辆</el-button>
+      <button class="btn-sm btn-sm-primary" @click="openAdd"><el-icon><Plus /></el-icon> 添加车辆</button>
     </div>
 
     <div class="card">
@@ -95,10 +95,10 @@ const carTypeName = (typeId) => carTypes.value.find(t => t.id === typeId)?.typeN
         </el-table-column>
         <el-table-column label="操作" width="180">
           <template #default="{ row }">
-            <el-button size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === 'AVAILABLE'" size="small" type="warning" plain @click="disableCar(row.id)">停用</el-button>
-            <el-button v-else-if="row.status === 'DISABLED'" size="small" type="success" plain @click="enableCar(row.id)">启用</el-button>
-            <el-button size="small" type="danger" plain @click="removeCar(row.id)">删除</el-button>
+            <button class="btn-sm btn-sm-ghost" @click="openEdit(row)">编辑</button>
+            <button v-if="row.status === 'AVAILABLE'" class="btn-sm btn-sm-warning" @click="disableCar(row.id)">停用</button>
+            <button v-else-if="row.status === 'DISABLED'" class="btn-sm btn-sm-success" @click="enableCar(row.id)">启用</button>
+            <button class="btn-sm btn-sm-danger" @click="removeCar(row.id)">删除</button>
           </template>
         </el-table-column>
       </el-table>
@@ -122,8 +122,8 @@ const carTypeName = (typeId) => carTypes.value.find(t => t.id === typeId)?.typeN
         <el-form-item label="图片链接"><el-input v-model="form.carImage" placeholder="https://..." /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveCar">保存</el-button>
+        <button class="btn-sm btn-sm-ghost" @click="dialogVisible = false">取消</button>
+        <button class="btn-sm btn-sm-primary" @click="saveCar">保存</button>
       </template>
     </el-dialog>
   </div>

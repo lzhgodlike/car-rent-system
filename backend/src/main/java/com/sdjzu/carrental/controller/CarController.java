@@ -33,9 +33,10 @@ public class CarController {
                                               @RequestParam(required = false) Long typeId,
                                               @RequestParam(required = false) String status,
                                               @RequestParam(required = false) String sort,
+                                              @RequestParam(required = false) String keyword,
                                               @RequestParam(defaultValue = "1") int pageNum,
                                               @RequestParam(defaultValue = "10") int pageSize) {
-        return ApiResponse.success(carService.list(brand, typeId, status, sort, pageNum, pageSize));
+        return ApiResponse.success(carService.list(brand, typeId, status, sort, keyword, pageNum, pageSize));
     }
 
     @GetMapping("/brands")

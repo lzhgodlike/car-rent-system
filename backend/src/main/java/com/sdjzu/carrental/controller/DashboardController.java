@@ -28,6 +28,10 @@ public class DashboardController {
                                                    @RequestParam(defaultValue = "7d") String range) {
         return ApiResponse.success(dashboardService.charts(period, range));
     }
+    @GetMapping("/pending")
+    public ApiResponse<Map<String, Object>> pending() {
+        return ApiResponse.success(dashboardService.pendingItems());
+    }
 }
 
 

@@ -41,7 +41,7 @@ const save = async () => {
           <el-form-item label="身份证号"><el-input v-model="form.idCard" /></el-form-item>
           <el-form-item label="性别" prop="gender"><el-select v-model="form.gender" style="width:100%"><el-option label="男" value="男" /><el-option label="女" value="女" /></el-select></el-form-item>
           <el-form-item label="新密码"><el-input v-model="form.password" type="password" show-password placeholder="不修改可留空" /></el-form-item>
-          <el-form-item><el-button type="primary" @click="save">保存修改</el-button></el-form-item>
+          <el-form-item><button class="btn-sm btn-sm-primary" @click="save">保存修改</button></el-form-item>
         </el-form>
       </div>
     </div>

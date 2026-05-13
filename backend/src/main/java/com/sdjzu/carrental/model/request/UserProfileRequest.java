@@ -10,4 +10,5 @@ public class UserProfileRequest {
     private String idCard;
     private String gender;
     private String password;
+    private String oldPassword;
 }

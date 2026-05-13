@@ -16,14 +16,13 @@ function isPublicPage() {
 }
 
 function redirectToLogin(message = '登录已失效，请重新登录') {
+  if (redirectedForAuth) return
+  redirectedForAuth = true
   clearAuth()
-  if (!redirectedForAuth && !isPublicPage()) {
-    redirectedForAuth = true
-    ElMessage.error(message)
-    router.replace({ path: '/home', query: { login: 1 } }).finally(() => {
-      redirectedForAuth = false
-    })
-  }
+  ElMessage.error(message)
+  router.replace({ path: '/home', query: { login: 1 } }).finally(() => {
+    setTimeout(() => { redirectedForAuth = false }, 1000)
+  })
 }
 
 function isAuthExpired(message, status) {

@@ -45,7 +45,7 @@ const remove = async (row) => {
   <div>
     <div class="toolbar">
       <span class="title">车型列表</span>
-      <el-button type="primary" size="small" @click="openAdd"><el-icon><Plus /></el-icon> 新增车型</el-button>
+      <button class="btn-sm btn-sm-primary" @click="openAdd"><el-icon><Plus /></el-icon> 新增车型</button>
     </div>
     <div class="card">
       <el-table :data="types" v-loading="loading">
@@ -56,8 +56,8 @@ const remove = async (row) => {
         </el-table-column>
         <el-table-column label="操作" width="160">
           <template #default="{ row }">
-            <el-button size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" plain @click="remove(row)">删除</el-button>
+            <button class="btn-sm btn-sm-ghost" @click="openEdit(row)">编辑</button>
+            <button class="btn-sm btn-sm-danger" @click="remove(row)">删除</button>
           </template>
         </el-table-column>
       </el-table>
@@ -73,8 +73,8 @@ const remove = async (row) => {
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="save">保存</el-button>
+        <button class="btn-sm btn-sm-ghost" @click="dialogVisible = false">取消</button>
+        <button class="btn-sm btn-sm-primary" @click="save">保存</button>
       </template>
     </el-dialog>
   </div>

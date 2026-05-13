@@ -34,8 +34,9 @@ public class RentOrderController {
     @GetMapping
     public ApiResponse<PageResult<RentOrder>> list(@RequestParam(defaultValue = "1") int pageNum,
                                                     @RequestParam(defaultValue = "10") int pageSize,
-                                                    @RequestParam(required = false) Long carId) {
-        return ApiResponse.success(rentOrderService.list(pageNum, pageSize, carId));
+                                                    @RequestParam(required = false) Long carId,
+                                                    @RequestParam(required = false) String status) {
+        return ApiResponse.success(rentOrderService.list(pageNum, pageSize, carId, status));
     }
 
     @PutMapping("/{id}/pickup")
@@ -48,6 +49,12 @@ public class RentOrderController {
     public ApiResponse<Void> cancel(@PathVariable Long id) {
         rentOrderService.cancel(id);
         return ApiResponse.success("订单已取消", null);
+    }
+
+    @PutMapping("/{id}/reject-pickup")
+    public ApiResponse<Void> rejectPickup(@PathVariable Long id) {
+        rentOrderService.rejectPickup(id);
+        return ApiResponse.success("已拒绝取车", null);
     }
 
     @PutMapping("/{id}/status")

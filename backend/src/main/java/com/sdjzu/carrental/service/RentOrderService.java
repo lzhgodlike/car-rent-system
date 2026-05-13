@@ -5,19 +5,24 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sdjzu.carrental.common.BusinessException;
 import com.sdjzu.carrental.common.PageResult;
 import com.sdjzu.carrental.mapper.CarMapper;
+import com.sdjzu.carrental.mapper.CarTypeMapper;
 import com.sdjzu.carrental.mapper.FaultReportMapper;
 import com.sdjzu.carrental.mapper.RentOrderMapper;
 import com.sdjzu.carrental.mapper.ReturnOrderMapper;
+import com.sdjzu.carrental.mapper.UserMapper;
 import com.sdjzu.carrental.model.dto.CarInfo;
 import com.sdjzu.carrental.model.entity.Car;
+import com.sdjzu.carrental.model.entity.CarType;
 import com.sdjzu.carrental.model.entity.FaultReport;
 import com.sdjzu.carrental.model.entity.RentOrder;
 import com.sdjzu.carrental.model.entity.ReturnOrder;
+import com.sdjzu.carrental.model.entity.User;
 import com.sdjzu.carrental.model.request.RentOrderRequest;
 import com.sdjzu.carrental.security.SecurityUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -39,15 +44,20 @@ public class RentOrderService {
 
     private final RentOrderMapper rentOrderMapper;
     private final CarMapper carMapper;
+    private final CarTypeMapper carTypeMapper;
     private final ReturnOrderMapper returnOrderMapper;
     private final FaultReportMapper faultReportMapper;
+    private final UserMapper userMapper;
 
     public RentOrderService(RentOrderMapper rentOrderMapper, CarMapper carMapper,
-                            ReturnOrderMapper returnOrderMapper, FaultReportMapper faultReportMapper) {
+                            CarTypeMapper carTypeMapper, ReturnOrderMapper returnOrderMapper,
+                            FaultReportMapper faultReportMapper, UserMapper userMapper) {
         this.rentOrderMapper = rentOrderMapper;
         this.carMapper = carMapper;
+        this.carTypeMapper = carTypeMapper;
         this.returnOrderMapper = returnOrderMapper;
         this.faultReportMapper = faultReportMapper;
+        this.userMapper = userMapper;
     }
 
     @Transactional
@@ -106,6 +116,24 @@ public class RentOrderService {
     }
 
     /**
+     * 管理员拒绝取车：PENDING_PICKUP → CANCELLED
+     */
+    @Transactional
+    public void rejectPickup(Long id) {
+        SecurityUtils.requireAdmin();
+        RentOrder rentOrder = rentOrderMapper.selectById(id);
+        if (rentOrder == null) {
+            throw new BusinessException("租车订单不存在");
+        }
+        if (!PENDING_PICKUP.equals(rentOrder.getOrderStatus())) {
+            throw new BusinessException("当前订单状态不允许拒绝取车");
+        }
+        rentOrder.setOrderStatus(CANCELLED);
+        rentOrderMapper.updateById(rentOrder);
+        recalculateCarStatus(rentOrder.getCarId());
+    }
+
+    /**
      * 取消订单：PENDING_PICKUP → CANCELLED
      */
     @Transactional
@@ -127,41 +155,45 @@ public class RentOrderService {
         recalculateCarStatus(rentOrder.getCarId());
     }
 
-    public PageResult<RentOrder> list(int pageNum, int pageSize, Long carId) {
+    public PageResult<RentOrder> list(int pageNum, int pageSize, Long carId, String status) {
         Page<RentOrder> page = rentOrderMapper.selectPage(new Page<>(pageNum, pageSize),
                 new LambdaQueryWrapper<RentOrder>().orderByDesc(RentOrder::getId)
                         .eq(carId != null, RentOrder::getCarId, carId)
+                        .eq(StringUtils.hasText(status), RentOrder::getOrderStatus, status)
                         .eq(!SecurityUtils.isAdmin(), RentOrder::getUserId, SecurityUtils.getUserId()));
         PageResult<RentOrder> result = PageResult.of(page);
 
+        boolean isAdmin = SecurityUtils.isAdmin();
         result.summary("pendingPickup", rentOrderMapper.selectCount(
                 new LambdaQueryWrapper<RentOrder>()
                         .eq(carId != null, RentOrder::getCarId, carId)
-                        .eq(!SecurityUtils.isAdmin(), RentOrder::getUserId, SecurityUtils.getUserId())
+                        .eq(!isAdmin, RentOrder::getUserId, SecurityUtils.getUserId())
                         .eq(RentOrder::getOrderStatus, PENDING_PICKUP)));
         result.summary("active", rentOrderMapper.selectCount(
                 new LambdaQueryWrapper<RentOrder>()
                         .eq(carId != null, RentOrder::getCarId, carId)
-                        .eq(!SecurityUtils.isAdmin(), RentOrder::getUserId, SecurityUtils.getUserId())
+                        .eq(!isAdmin, RentOrder::getUserId, SecurityUtils.getUserId())
                         .eq(RentOrder::getOrderStatus, RENTED)));
         result.summary("returnPending", rentOrderMapper.selectCount(
                 new LambdaQueryWrapper<RentOrder>()
                         .eq(carId != null, RentOrder::getCarId, carId)
-                        .eq(!SecurityUtils.isAdmin(), RentOrder::getUserId, SecurityUtils.getUserId())
+                        .eq(!isAdmin, RentOrder::getUserId, SecurityUtils.getUserId())
                         .eq(RentOrder::getOrderStatus, RETURN_PENDING)));
         result.summary("completed", rentOrderMapper.selectCount(
                 new LambdaQueryWrapper<RentOrder>()
                         .eq(carId != null, RentOrder::getCarId, carId)
-                        .eq(!SecurityUtils.isAdmin(), RentOrder::getUserId, SecurityUtils.getUserId())
+                        .eq(!isAdmin, RentOrder::getUserId, SecurityUtils.getUserId())
                         .eq(RentOrder::getOrderStatus, COMPLETED)));
         result.summary("cancelled", rentOrderMapper.selectCount(
                 new LambdaQueryWrapper<RentOrder>()
                         .eq(carId != null, RentOrder::getCarId, carId)
-                        .eq(!SecurityUtils.isAdmin(), RentOrder::getUserId, SecurityUtils.getUserId())
+                        .eq(!isAdmin, RentOrder::getUserId, SecurityUtils.getUserId())
                         .eq(RentOrder::getOrderStatus, CANCELLED)));
 
         enrichWithCarInfo(page.getRecords());
         enrichReturnRequestFlag(page.getRecords());
+        enrichWithUserName(page.getRecords());
+        enrichAvailableActions(page.getRecords());
         return result;
     }
 
@@ -170,14 +202,65 @@ public class RentOrderService {
         List<Long> orderIds = orders.stream().map(RentOrder::getId).collect(Collectors.toList());
         List<ReturnOrder> returns = returnOrderMapper.selectList(
                 new LambdaQueryWrapper<ReturnOrder>().in(ReturnOrder::getRentOrderId, orderIds));
-        Set<Long> hasRequest = returns.stream().map(ReturnOrder::getRentOrderId).collect(Collectors.toSet());
-        Map<Long, BigDecimal> feeMap = returns.stream()
-                .filter(r -> r.getExtraFee() != null)
-                .collect(Collectors.toMap(ReturnOrder::getRentOrderId, ReturnOrder::getExtraFee, (a, b) -> a));
+        Map<Long, ReturnOrder> returnMap = returns.stream()
+                .collect(Collectors.toMap(ReturnOrder::getRentOrderId, r -> r, (a, b) -> a));
         orders.forEach(o -> {
-            o.setHasReturnRequest(hasRequest.contains(o.getId()));
-            o.setExtraFee(feeMap.get(o.getId()));
+            ReturnOrder ret = returnMap.get(o.getId());
+            o.setHasReturnRequest(ret != null);
+            o.setExtraFee(ret != null && ret.getExtraFee() != null ? ret.getExtraFee() : BigDecimal.ZERO);
+            o.setReturnOrder(ret);
         });
+    }
+
+    private void enrichWithUserName(List<RentOrder> orders) {
+        if (orders == null || orders.isEmpty()) return;
+        List<Long> userIds = orders.stream().map(RentOrder::getUserId).distinct().collect(Collectors.toList());
+        Map<Long, User> userMap = userMapper.selectBatchIds(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
+        orders.forEach(o -> {
+            User user = userMap.get(o.getUserId());
+            if (user != null) {
+                o.setUserName(user.getUsername());
+                o.setUserRealName(user.getRealName());
+                o.setUserPhone(user.getPhone());
+                o.setUserIdCard(user.getIdCard());
+            }
+        });
+    }
+
+    private void enrichAvailableActions(List<RentOrder> orders) {
+        if (orders == null || orders.isEmpty()) return;
+        java.time.LocalDate today = java.time.LocalDate.now();
+        for (RentOrder o : orders) {
+            java.util.List<String> actions = new java.util.ArrayList<>();
+            actions.add("view_detail");
+            switch (o.getOrderStatus()) {
+                case PENDING_PICKUP:
+                    actions.add("cancel");
+                    break;
+                case RENTED:
+                    actions.add("return_car");
+                    break;
+                case RETURN_PENDING:
+                    actions.add("return_pending");
+                    break;
+                case COMPLETED:
+                    actions.add("repurchase");
+                    if (o.getActualReturnDate() != null) {
+                        long days = java.time.temporal.ChronoUnit.DAYS.between(o.getActualReturnDate(), today);
+                        if (days <= 7) actions.add("report_fault");
+                    }
+                    break;
+                case CANCELLED:
+                    actions.add("repurchase");
+                    if (o.getRentDate() != null) {
+                        long days = java.time.temporal.ChronoUnit.DAYS.between(o.getRentDate(), today);
+                        if (days <= 7) actions.add("report_fault");
+                    }
+                    break;
+            }
+            o.setAvailableActions(actions);
+        }
     }
 
     private void enrichWithCarInfo(List<RentOrder> orders) {
@@ -185,11 +268,17 @@ public class RentOrderService {
         List<Long> carIds = orders.stream().map(RentOrder::getCarId).distinct().collect(Collectors.toList());
         Map<Long, Car> carMap = carMapper.selectBatchIds(carIds).stream()
                 .collect(Collectors.toMap(Car::getId, c -> c, (a, b) -> a));
+        // 查询车型名称
+        List<Long> typeIds = carMap.values().stream().map(Car::getTypeId).filter(id -> id != null).distinct().collect(Collectors.toList());
+        Map<Long, String> typeNameMap = typeIds.isEmpty() ? java.util.Collections.emptyMap() :
+                carTypeMapper.selectBatchIds(typeIds).stream()
+                        .collect(Collectors.toMap(CarType::getId, CarType::getTypeName, (a, b) -> a));
         for (RentOrder order : orders) {
             Car car = carMap.get(order.getCarId());
             if (car != null) {
                 CarInfo info = new CarInfo();
                 BeanUtils.copyProperties(car, info);
+                info.setTypeName(typeNameMap.get(car.getTypeId()));
                 order.setCarInfo(info);
             }
         }

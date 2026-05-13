@@ -17,6 +17,7 @@ import com.sdjzu.carrental.security.SecurityUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -42,11 +43,29 @@ public class FaultReportService {
     @Transactional
     public void create(FaultReportRequest request) {
         if (!SecurityUtils.isAdmin()) {
-            Long count = rentOrderMapper.selectCount(new LambdaQueryWrapper<RentOrder>()
+            // 查找用户该车辆最近的相关订单
+            RentOrder latestOrder = rentOrderMapper.selectOne(new LambdaQueryWrapper<RentOrder>()
                     .eq(RentOrder::getUserId, SecurityUtils.getUserId())
-                    .eq(RentOrder::getCarId, request.getCarId()));
-            if (count == null || count == 0) {
+                    .eq(RentOrder::getCarId, request.getCarId())
+                    .in(RentOrder::getOrderStatus, RentOrderService.RETURN_PENDING, RentOrderService.CANCELLED, RentOrderService.COMPLETED)
+                    .orderByDesc(RentOrder::getId)
+                    .last("LIMIT 1"));
+            if (latestOrder == null) {
                 throw new BusinessException("您没有租过该车辆，无法提交故障报告");
+            }
+            // 待还车状态可直接报修
+            if (RentOrderService.RETURN_PENDING.equals(latestOrder.getOrderStatus())) {
+                // 允许报修
+            } else {
+                // 已完成/已取消：检查7天限制
+                java.time.LocalDate referenceDate = RentOrderService.COMPLETED.equals(latestOrder.getOrderStatus())
+                        ? latestOrder.getActualReturnDate() : latestOrder.getRentDate();
+                if (referenceDate != null) {
+                    long days = java.time.temporal.ChronoUnit.DAYS.between(referenceDate, java.time.LocalDate.now());
+                    if (days > 7) {
+                        throw new BusinessException("已超过7天，无法提交报修申请");
+                    }
+                }
             }
         }
         FaultReport faultReport = new FaultReport();
@@ -61,10 +80,13 @@ public class FaultReportService {
         rentOrderService.recalculateCarStatus(request.getCarId());
     }
 
-    public PageResult<FaultReport> list(int pageNum, int pageSize, Long carId) {
+    public PageResult<FaultReport> list(int pageNum, int pageSize, Long carId, String status) {
         LambdaQueryWrapper<FaultReport> wrapper = new LambdaQueryWrapper<FaultReport>().orderByDesc(FaultReport::getId);
         if (carId != null) {
             wrapper.eq(FaultReport::getCarId, carId);
+        }
+        if (StringUtils.hasText(status)) {
+            wrapper.eq(FaultReport::getFaultStatus, status);
         }
         if (!SecurityUtils.isAdmin()) {
             wrapper.eq(FaultReport::getUserId, SecurityUtils.getUserId());
@@ -128,7 +150,7 @@ public class FaultReportService {
      * 管理员完成维修：REPAIRING → RESOLVED，车辆状态自动推导
      */
     @Transactional
-    public void completeRepair(Long id) {
+    public void completeRepair(Long id, FaultHandleRequest request) {
         SecurityUtils.requireAdmin();
         FaultReport faultReport = faultReportMapper.selectById(id);
         if (faultReport == null) {
@@ -139,6 +161,10 @@ public class FaultReportService {
         }
 
         faultReport.setFaultStatus("RESOLVED");
+        if (request != null && request.getHandleResult() != null) {
+            faultReport.setHandleResult(request.getHandleResult());
+        }
+        faultReport.setHandleTime(LocalDateTime.now());
         faultReportMapper.updateById(faultReport);
 
         rentOrderService.recalculateCarStatus(faultReport.getCarId());

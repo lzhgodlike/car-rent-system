@@ -120,6 +120,23 @@ input, select, textarea { font-family: inherit; }
 .text-info { color: var(--info); }
 .text-muted { color: var(--muted); }
 
+/* ========== ADMIN BUTTONS ========== */
+.btn-sm {
+  padding: 6px 14px; border-radius: 8px; font-size: 12px;
+  font-family: 'Noto Sans SC', sans-serif; cursor: pointer; transition: all .15s;
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.btn-sm-primary { background: var(--accent); border: none; color: #fff; }
+.btn-sm-primary:hover { background: #b02e22; }
+.btn-sm-success { background: rgba(58,158,110,0.12); border: none; color: var(--success); }
+.btn-sm-success:hover { background: rgba(58,158,110,0.2); }
+.btn-sm-danger { background: rgba(226,92,92,0.1); border: none; color: var(--danger); }
+.btn-sm-danger:hover { background: rgba(226,92,92,0.18); }
+.btn-sm-warning { background: rgba(212,130,10,0.1); border: none; color: var(--warning); }
+.btn-sm-warning:hover { background: rgba(212,130,10,0.18); }
+.btn-sm-ghost { background: none; border: 1px solid var(--border); color: var(--text); }
+.btn-sm-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
 /* Status badges */
 .status-badge {
   display: inline-flex; align-items: center; gap: 5px;

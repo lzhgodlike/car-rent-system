@@ -34,8 +34,9 @@ public class ReturnOrderController {
 
     @GetMapping
     public ApiResponse<PageResult<ReturnOrder>> list(@RequestParam(defaultValue = "1") int pageNum,
-                                                      @RequestParam(defaultValue = "10") int pageSize) {
-        return ApiResponse.success(returnOrderService.list(pageNum, pageSize));
+                                                      @RequestParam(defaultValue = "10") int pageSize,
+                                                      @RequestParam(required = false) String status) {
+        return ApiResponse.success(returnOrderService.list(pageNum, pageSize, status));
     }
 
     @PutMapping("/{id}/confirm")

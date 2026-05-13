@@ -18,6 +18,7 @@ import com.sdjzu.carrental.security.SecurityUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -82,10 +83,12 @@ public class ReturnOrderService {
         rentOrderService.recalculateCarStatus(rentOrder.getCarId());
     }
 
-    public PageResult<ReturnOrder> list(int pageNum, int pageSize) {
+    public PageResult<ReturnOrder> list(int pageNum, int pageSize, String status) {
         if (SecurityUtils.isAdmin()) {
             Page<ReturnOrder> page = returnOrderMapper.selectPage(new Page<>(pageNum, pageSize),
-                    new LambdaQueryWrapper<ReturnOrder>().orderByDesc(ReturnOrder::getId));
+                    new LambdaQueryWrapper<ReturnOrder>()
+                            .eq(StringUtils.hasText(status), ReturnOrder::getStatus, status)
+                            .orderByDesc(ReturnOrder::getId));
             PageResult<ReturnOrder> result = PageResult.of(page);
             result.summary("pending", returnOrderMapper.selectCount(
                     new LambdaQueryWrapper<ReturnOrder>().eq(ReturnOrder::getStatus, "PENDING")));

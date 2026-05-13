@@ -38,8 +38,10 @@ public class UserController {
 
     @GetMapping
     public ApiResponse<PageResult<User>> listUsers(@RequestParam(defaultValue = "1") int pageNum,
-                                                    @RequestParam(defaultValue = "10") int pageSize) {
-        return ApiResponse.success(userService.listUsers(pageNum, pageSize));
+                                                    @RequestParam(defaultValue = "10") int pageSize,
+                                                    @RequestParam(required = false) String role,
+                                                    @RequestParam(required = false) Integer status) {
+        return ApiResponse.success(userService.listUsers(pageNum, pageSize, role, status));
     }
 
     @PutMapping("/{id}")

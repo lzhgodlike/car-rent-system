@@ -8,11 +8,14 @@ import java.math.BigDecimal;
 public class CarInfo {
     private Long id;
     private String carNo;
+    private Long typeId;
+    private String typeName;
     private String brand;
     private String model;
     private String plateNumber;
     private BigDecimal dayPrice;
     private Integer mileage;
+    private String pickupAddress;
     private String carImage;
     private String status;
 }

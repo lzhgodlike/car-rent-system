@@ -35,8 +35,9 @@ public class FaultReportController {
     @GetMapping
     public ApiResponse<PageResult<FaultReport>> list(@RequestParam(defaultValue = "1") int pageNum,
                                                       @RequestParam(defaultValue = "10") int pageSize,
-                                                      @RequestParam(required = false) Long carId) {
-        return ApiResponse.success(faultReportService.list(pageNum, pageSize, carId));
+                                                      @RequestParam(required = false) Long carId,
+                                                      @RequestParam(required = false) String status) {
+        return ApiResponse.success(faultReportService.list(pageNum, pageSize, carId, status));
     }
 
     @PutMapping("/{id}/handle")
@@ -46,8 +47,8 @@ public class FaultReportController {
     }
 
     @PutMapping("/{id}/complete-repair")
-    public ApiResponse<Void> completeRepair(@PathVariable Long id) {
-        faultReportService.completeRepair(id);
+    public ApiResponse<Void> completeRepair(@PathVariable Long id, @RequestBody FaultHandleRequest request) {
+        faultReportService.completeRepair(id, request);
         return ApiResponse.success("维修完成", null);
     }
 

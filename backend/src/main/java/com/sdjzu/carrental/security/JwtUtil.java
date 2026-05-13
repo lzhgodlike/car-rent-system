@@ -17,12 +17,12 @@ import java.util.Map;
 public class JwtUtil {
 
     private final SecretKey secretKey;
-    private final Integer expireHours;
+    private final long expireMinutes;
 
     public JwtUtil(@Value("${jwt.secret}") String secret,
-                   @Value("${jwt.expire-hours}") Integer expireHours) {
+                   @Value("${jwt.expire-minutes:1440}") long expireMinutes) {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
-        this.expireHours = expireHours;
+        this.expireMinutes = expireMinutes;
     }
 
     public String generateToken(Long userId, String username, String role) {
@@ -30,7 +30,7 @@ public class JwtUtil {
         return Jwts.builder()
                 .claims(Map.of("userId", userId, "username", username, "role", role))
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plus(expireHours, ChronoUnit.HOURS)))
+                .expiration(Date.from(now.plus(expireMinutes, ChronoUnit.MINUTES)))
                 .signWith(secretKey)
                 .compact();
     }

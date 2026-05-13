@@ -30,7 +30,7 @@ public class CarService {
                 .stream().map(Car::getBrand).collect(Collectors.toList());
     }
 
-    public PageResult<Car> list(String brand, Long typeId, String status, String sort, int pageNum, int pageSize) {
+    public PageResult<Car> list(String brand, Long typeId, String status, String sort, String keyword, int pageNum, int pageSize) {
         Page<Car> page;
         if ("rentCount".equals(sort) || "totalIncome".equals(sort)) {
             String orderCol = "rentCount".equals(sort) ? "s.cnt" : "s.income";
@@ -44,6 +44,14 @@ public class CarService {
                     .like(StringUtils.hasText(brand), Car::getBrand, brand)
                     .eq(typeId != null, Car::getTypeId, typeId)
                     .eq(StringUtils.hasText(status), Car::getStatus, status);
+            // 关键词搜索：匹配品牌、型号、车牌号
+            if (StringUtils.hasText(keyword)) {
+                wrapper.and(w -> w
+                        .like(Car::getBrand, keyword)
+                        .or().like(Car::getModel, keyword)
+                        .or().like(Car::getPlateNumber, keyword)
+                );
+            }
             if ("asc".equals(sort)) {
                 wrapper.orderByAsc(Car::getDayPrice);
             } else if ("desc".equals(sort)) {
