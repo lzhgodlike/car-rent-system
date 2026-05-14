@@ -1,8 +1,13 @@
 backend/target/
+backend/uploads/
 frontend/node_modules/
 frontend/dist/
+前端设计稿/
 .idea/
 .m2/
 .vscode/
+.claude/
 tmp_auth_snapshot.txt
 *.iml
+.claudeignore
+todo.txt
