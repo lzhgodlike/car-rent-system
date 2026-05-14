@@ -27,6 +27,7 @@ import org.springframework.util.StringUtils;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -159,22 +160,23 @@ public class RentOrderService {
     }
 
     public PageResult<RentOrder> list(int pageNum, int pageSize, Long carId, String status, String keyword) {
+        Set<String> statuses = parseStatuses(status);
         LambdaQueryWrapper<RentOrder> wrapper = new LambdaQueryWrapper<RentOrder>().orderByDesc(RentOrder::getId)
                 .eq(carId != null, RentOrder::getCarId, carId)
-                .eq(StringUtils.hasText(status), RentOrder::getOrderStatus, status)
+                .in(!statuses.isEmpty(), RentOrder::getOrderStatus, statuses)
                 .eq(!SecurityUtils.isAdmin(), RentOrder::getUserId, SecurityUtils.getUserId());
 
         if (StringUtils.hasText(keyword)) {
             List<Long> matchedCarIds = carMapper.selectList(
-                    new LambdaQueryWrapper<Car>()
-                            .like(Car::getBrand, keyword)
-                            .or().like(Car::getModel, keyword)
-                            .or().like(Car::getPlateNumber, keyword))
+                            new LambdaQueryWrapper<Car>()
+                                    .like(Car::getBrand, keyword)
+                                    .or().like(Car::getModel, keyword)
+                                    .or().like(Car::getPlateNumber, keyword))
                     .stream().map(Car::getId).collect(Collectors.toList());
             List<Long> matchedUserIds = userMapper.selectList(
-                    new LambdaQueryWrapper<User>()
-                            .like(User::getUsername, keyword)
-                            .or().like(User::getRealName, keyword))
+                            new LambdaQueryWrapper<User>()
+                                    .like(User::getUsername, keyword)
+                                    .or().like(User::getRealName, keyword))
                     .stream().map(User::getId).collect(Collectors.toList());
             if (!matchedCarIds.isEmpty() || !matchedUserIds.isEmpty()) {
                 wrapper.and(w -> {
@@ -222,6 +224,20 @@ public class RentOrderService {
         enrichWithUserName(page.getRecords());
         enrichAvailableActions(page.getRecords());
         return result;
+    }
+
+    private Set<String> parseStatuses(String status) {
+        if (!StringUtils.hasText(status)) {
+            return Set.of();
+        }
+        if ("active".equalsIgnoreCase(status.trim())) {
+            return Set.of(PENDING_PICKUP, RENTED);
+        }
+        return Arrays.stream(status.split(","))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .map(String::toUpperCase)
+                .collect(Collectors.toSet());
     }
 
     private void enrichReturnRequestFlag(List<RentOrder> orders) {

@@ -48,6 +48,14 @@ const tabs = [
   { key: 'CANCELLED', label: '已取消' },
 ]
 
+const tabStatusParams = {
+  all: undefined,
+  active: 'active',
+  RETURN_PENDING: 'RETURN_PENDING',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED'
+}
+
 const loadData = async (reset = false) => {
   if (reset) {
     pageNum.value = 1
@@ -57,18 +65,11 @@ const loadData = async (reset = false) => {
   if (!hasMore.value) return
   loading.value = true
   try {
+    const status = tabStatusParams[activeTab.value]
     const page = await request.get('/rent-orders', {
-      params: { pageNum: pageNum.value, pageSize }
+      params: { pageNum: pageNum.value, pageSize, status }
     })
-    let records = page.records
-    // 前端筛选 tab
-    if (activeTab.value !== 'all') {
-      if (activeTab.value === 'active') {
-        records = records.filter(o => ['PENDING_PICKUP', 'RENTED'].includes(o.orderStatus))
-      } else {
-        records = records.filter(o => o.orderStatus === activeTab.value)
-      }
-    }
+    const records = page.records
     if (reset) {
       orders.value = records
     } else {
