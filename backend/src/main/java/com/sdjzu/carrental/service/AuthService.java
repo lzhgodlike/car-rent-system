@@ -62,6 +62,19 @@ public class AuthService {
         return sanitize(user);
     }
 
+    public TokenVO refresh() {
+        Long userId = SecurityUtils.getUserId();
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        if (user.getStatus() != null && user.getStatus() == 0) {
+            throw new BusinessException("该账号已被禁用");
+        }
+        String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
+        return new TokenVO(token, sanitize(user));
+    }
+
     public User sanitize(User user) {
         if (user == null) {
             return null;

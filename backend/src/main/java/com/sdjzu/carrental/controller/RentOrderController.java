@@ -35,8 +35,9 @@ public class RentOrderController {
     public ApiResponse<PageResult<RentOrder>> list(@RequestParam(defaultValue = "1") int pageNum,
                                                     @RequestParam(defaultValue = "10") int pageSize,
                                                     @RequestParam(required = false) Long carId,
-                                                    @RequestParam(required = false) String status) {
-        return ApiResponse.success(rentOrderService.list(pageNum, pageSize, carId, status));
+                                                    @RequestParam(required = false) String status,
+                                                    @RequestParam(required = false) String keyword) {
+        return ApiResponse.success(rentOrderService.list(pageNum, pageSize, carId, status, keyword));
     }
 
     @PutMapping("/{id}/pickup")

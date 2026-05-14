@@ -37,4 +37,9 @@ public class AuthController {
     public ApiResponse<Object> me() {
         return ApiResponse.success(authService.me());
     }
+
+    @PostMapping("/refresh")
+    public ApiResponse<TokenVO> refresh() {
+        return ApiResponse.success(authService.refresh());
+    }
 }

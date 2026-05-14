@@ -8,6 +8,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @TableName("car_info")
@@ -22,6 +23,9 @@ public class Car {
     private String plateNumber;
     private BigDecimal dayPrice;
     private Integer mileage;
+    private String province;
+    private String city;
+    private String detailAddress;
     private String pickupAddress;
     private String carImage;
     private String status;
@@ -33,4 +37,10 @@ public class Car {
 
     @TableField(exist = false)
     private BigDecimal totalIncome;
+
+    @TableField(exist = false)
+    private String currentRenterName;
+
+    @TableField(exist = false)
+    private List<CarImage> carImages;
 }

@@ -14,6 +14,7 @@ const currentId = ref(null)
 const form = ref({ username: '', realName: '', phone: '', idCard: '', gender: '', role: 'USER', status: 1, password: '' })
 const filterRole = ref('')
 const filterStatus = ref('')
+const keyword = ref('')
 
 const loadData = async () => {
   loading.value = true
@@ -21,11 +22,15 @@ const loadData = async () => {
     const params = { pageNum: currentPage.value, pageSize: pageSize.value }
     if (filterRole.value) params.role = filterRole.value
     if (filterStatus.value !== '') params.status = filterStatus.value
+    if (keyword.value) params.keyword = keyword.value
     const page = await request.get('/users', { params })
     users.value = page.records; total.value = page.total; summary.value = page.summary || {}
   } finally { loading.value = false }
 }
 const onFilterChange = () => { currentPage.value = 1; loadData() }
+const onReset = () => { keyword.value = ''; filterRole.value = ''; filterStatus.value = ''; currentPage.value = 1; loadData() }
+let searchTimer = null
+const onKeywordChange = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { currentPage.value = 1; loadData() }, 300) }
 onMounted(loadData)
 
 const openEdit = (row) => {
@@ -51,13 +56,15 @@ const deleteUser = async (row) => {
         <span class="sum-item">管理员 <strong>{{ summary.admin ?? 0 }}</strong></span>
         <span class="sum-item">普通用户 <strong>{{ summary.normal ?? 0 }}</strong></span>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <el-input v-model="keyword" placeholder="搜索用户名、姓名、手机号…" clearable size="small" style="width:200px;" @input="onKeywordChange" @clear="onKeywordChange" />
         <el-select v-model="filterRole" placeholder="角色" clearable size="small" style="width:120px;" @change="onFilterChange">
           <el-option label="管理员" value="ADMIN" /><el-option label="普通用户" value="USER" />
         </el-select>
         <el-select v-model="filterStatus" placeholder="状态" clearable size="small" style="width:100px;" @change="onFilterChange">
           <el-option label="启用" :value="1" /><el-option label="停用" :value="0" />
         </el-select>
+        <button class="btn-sm btn-sm-ghost" @click="onReset"><el-icon><RefreshLeft /></el-icon></button>
       </div>
     </div>
     <div class="card">
@@ -68,16 +75,18 @@ const deleteUser = async (row) => {
         <el-table-column prop="phone" label="手机号" width="130"><template #default="{row}"><span class="font-mono">{{ row.phone }}</span></template></el-table-column>
         <el-table-column prop="idCard" label="身份证号" width="180"><template #default="{row}"><span class="font-mono" style="font-size:12px;">{{ row.idCard }}</span></template></el-table-column>
         <el-table-column prop="gender" label="性别" width="70" />
-        <el-table-column label="角色" width="90">
+        <el-table-column label="角色" width="120">
           <template #default="{row}"><span class="status-badge" :class="row.role === 'ADMIN' ? 'status-repairing' : 'status-available'">{{ row.role === 'ADMIN' ? '管理员' : '普通用户' }}</span></template>
         </el-table-column>
         <el-table-column label="状态" width="80">
           <template #default="{row}"><span class="status-badge" :class="Number(row.status) === 1 ? 'status-available' : 'status-disabled'">{{ Number(row.status) === 1 ? '启用' : '停用' }}</span></template>
         </el-table-column>
-        <el-table-column label="操作" width="140">
+        <el-table-column label="操作" width="100">
           <template #default="{row}">
-            <button class="btn-sm btn-sm-ghost" @click="openEdit(row)">编辑</button>
-            <button class="btn-sm btn-sm-danger" @click="deleteUser(row)">删除</button>
+            <div style="display:flex;gap:6px;">
+              <button class="btn-sm btn-sm-ghost btn-icon" title="编辑" @click="openEdit(row)"><el-icon><Edit /></el-icon></button>
+              <button class="btn-sm btn-sm-danger btn-icon" title="删除" @click="deleteUser(row)"><el-icon><Delete /></el-icon></button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -106,10 +115,12 @@ const deleteUser = async (row) => {
 </template>
 
 <style scoped>
-.toolbar { display: flex; align-items: center; justify-content: space-between; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
 .summary-strip { display: flex; gap: 16px; }
 .sum-item { font-size: 12px; color: var(--muted); }
 .sum-item strong { color: var(--text); margin-left: 4px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .pagination-wrap { display: flex; justify-content: flex-end; padding: 16px; }
+:deep(.el-input--small) { --el-input-bg-color: var(--surface2); --el-input-border-color: var(--border); --el-input-hover-border-color: var(--accent); --el-input-focus-border-color: var(--accent); }
+:deep(.el-select--small) { --el-select-input-bg-color: var(--surface2); --el-select-border-color: var(--border); }
 </style>

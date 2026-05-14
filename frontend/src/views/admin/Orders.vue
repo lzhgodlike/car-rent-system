@@ -10,6 +10,7 @@ const pageSize = ref(10)
 const total = ref(0)
 const summary = ref({})
 const filterStatus = ref('')
+const keyword = ref('')
 
 // 详情弹窗
 const detailVisible = ref(false)
@@ -34,11 +35,14 @@ const maskIdCard = (v) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const page = await request.get('/rent-orders', { params: { pageNum: currentPage.value, pageSize: pageSize.value, status: filterStatus.value || undefined } })
+    const page = await request.get('/rent-orders', { params: { pageNum: currentPage.value, pageSize: pageSize.value, status: filterStatus.value || undefined, keyword: keyword.value || undefined } })
     orders.value = page.records; total.value = page.total; summary.value = page.summary || {}
   } finally { loading.value = false }
 }
 const onFilterChange = () => { currentPage.value = 1; loadData() }
+const onReset = () => { keyword.value = ''; filterStatus.value = ''; currentPage.value = 1; loadData() }
+let searchTimer = null
+const onKeywordChange = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { currentPage.value = 1; loadData() }, 300) }
 onMounted(loadData)
 
 const openDetail = (row) => { detailOrder.value = row; detailVisible.value = true }
@@ -73,9 +77,13 @@ const rejectPickup = async () => {
         <span class="sum-item">待确认还车 <strong>{{ summary.returnPending ?? 0 }}</strong></span>
         <span class="sum-item">已完成 <strong>{{ summary.completed ?? 0 }}</strong></span>
       </div>
-      <el-select v-model="filterStatus" placeholder="筛选状态" clearable size="small" style="width:140px;" @change="onFilterChange">
-        <el-option v-for="(label, key) in statusMap" :key="key" :label="label" :value="key" />
-      </el-select>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <el-input v-model="keyword" placeholder="搜索用户名、车辆、车牌号…" clearable size="small" style="width:220px;" @input="onKeywordChange" @clear="onKeywordChange" />
+        <el-select v-model="filterStatus" placeholder="筛选状态" clearable size="small" style="width:140px;" @change="onFilterChange">
+          <el-option v-for="(label, key) in statusMap" :key="key" :label="label" :value="key" />
+        </el-select>
+        <button class="btn-sm btn-sm-ghost" @click="onReset"><el-icon><RefreshLeft /></el-icon></button>
+      </div>
     </div>
     <div class="card">
       <el-table :data="orders" v-loading="loading">
@@ -122,6 +130,10 @@ const rejectPickup = async () => {
           <div class="pickup-row"><span class="pickup-label">还车日期</span><span>{{ pickupOrder.expectedReturnDate }}</span></div>
           <div class="pickup-row"><span class="pickup-label">租赁天数</span><span>{{ pickupOrder.rentDays }}天</span></div>
           <div class="pickup-row"><span class="pickup-label">金额</span><span class="text-accent font-mono">{{ money(pickupOrder.totalPrice) }}</span></div>
+          <div v-if="pickupOrder.remark" class="pickup-remark">
+            <div class="pickup-remark-label">用户备注</div>
+            <div class="pickup-remark-text">{{ pickupOrder.remark }}</div>
+          </div>
         </div>
       </div>
       <template #footer>
@@ -200,7 +212,7 @@ const rejectPickup = async () => {
 </template>
 
 <style scoped>
-.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
 .summary-strip { display: flex; gap: 16px; }
 .sum-item { font-size: 12px; color: var(--muted); }
 .sum-item strong { color: var(--text); margin-left: 4px; }
@@ -208,12 +220,37 @@ const rejectPickup = async () => {
 .pagination-wrap { display: flex; justify-content: flex-end; padding: 16px; }
 .car-cell-name { font-weight: 500; font-size: 13px; }
 .car-cell-plate { font-size: 11px; color: var(--muted); margin-top: 2px; }
+:deep(.el-input--small) { --el-input-bg-color: var(--surface2); --el-input-border-color: var(--border); --el-input-hover-border-color: var(--accent); --el-input-focus-border-color: var(--accent); }
+:deep(.el-select--small) { --el-select-input-bg-color: var(--surface2); --el-select-border-color: var(--border); }
 
 /* 取车弹窗 */
 .pickup-info { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .pickup-row { display: flex; justify-content: space-between; padding: 12px 16px; font-size: 14px; border-bottom: 1px solid var(--border); }
 .pickup-row:last-child { border-bottom: none; }
 .pickup-label { color: var(--muted); font-size: 13px; }
+.pickup-remark {
+  margin: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.08);
+}
+.pickup-remark-label {
+  font-size: 12px;
+  color: var(--accent);
+  margin-bottom: 8px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.pickup-remark-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  font-weight: 500;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* 详情弹窗 */
 .detail-content { max-height: 65vh; overflow-y: auto; }

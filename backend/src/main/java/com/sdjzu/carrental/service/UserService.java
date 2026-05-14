@@ -64,11 +64,15 @@ public class UserService {
         userMapper.updateById(user);
     }
 
-    public PageResult<User> listUsers(int pageNum, int pageSize, String role, Integer status) {
+    public PageResult<User> listUsers(int pageNum, int pageSize, String role, Integer status, String keyword) {
         SecurityUtils.requireAdmin();
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<User>()
                 .eq(StringUtils.hasText(role), User::getRole, role)
                 .eq(status != null, User::getStatus, status)
+                .and(StringUtils.hasText(keyword), w -> w
+                        .like(User::getUsername, keyword)
+                        .or().like(User::getRealName, keyword)
+                        .or().like(User::getPhone, keyword))
                 .orderByDesc(User::getId);
         Page<User> page = userMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
         page.getRecords().forEach(item -> item.setPassword(null));

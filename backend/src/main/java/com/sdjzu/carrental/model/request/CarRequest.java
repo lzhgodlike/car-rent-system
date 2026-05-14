@@ -1,20 +1,19 @@
 package com.sdjzu.carrental.model.request;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Data
 public class CarRequest {
-
-    @NotBlank(message = "车辆编号不能为空")
-    @Pattern(regexp = "^[A-Z]{2,6}[0-9]{2,6}$", message = "车辆编号需为大写字母加数字，例如 CAR001")
-    private String carNo;
 
     @NotNull(message = "车辆类型不能为空")
     private Long typeId;
@@ -27,7 +26,7 @@ public class CarRequest {
 
     @NotBlank(message = "车牌号不能为空")
     @Pattern(
-            regexp = "^([\u4e00-\u9fa5][A-Z][A-Z0-9]{5,6}|[A-Z]{3}[A-Z0-9]{5})$",
+            regexp = "^([一-龥][A-Z][A-Z0-9]{5,6}|[A-Z]{3}[A-Z0-9]{5})$",
             message = "请输入合法车牌号，例如 鲁A12345 或 LUA12345"
     )
     private String plateNumber;
@@ -40,10 +39,16 @@ public class CarRequest {
     @Min(value = 0, message = "公里数不能小于0")
     private Integer mileage;
 
-    private String pickupAddress;
+    @NotBlank(message = "省份不能为空")
+    private String province;
 
-    @Pattern(regexp = "^(|https?://.+)$", message = "图片链接需为空或以 http/https 开头")
-    private String carImage;
+    @NotBlank(message = "城市不能为空")
+    private String city;
 
-    private String status;
+    @NotBlank(message = "详细地址不能为空")
+    private String detailAddress;
+
+    @NotEmpty(message = "请至少添加一张车辆图片")
+    @Valid
+    private List<CarImageItemRequest> images;
 }

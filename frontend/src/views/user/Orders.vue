@@ -33,6 +33,12 @@ const statusClass = { PENDING_PICKUP: 'os-pending', RENTED: 'os-active', RETURN_
 const money = (v) => `¥${Number(v || 0).toLocaleString()}`
 const totalAmount = (row) => Number(row.totalPrice || 0) + Number(row.extraFee || 0)
 const carName = (row) => row.carInfo ? `${row.carInfo.brand} ${row.carInfo.model}` : '-'
+const carImages = (row) => {
+  const images = row.carInfo?.carImages?.filter(Boolean) || []
+  if (images.length) return images
+  return row.carInfo?.carImage ? [row.carInfo.carImage] : []
+}
+const primaryCarImage = (row) => carImages(row)[0] || ''
 
 const tabs = [
   { key: 'all', label: '全部订单' },
@@ -188,7 +194,7 @@ const handleAction = (action, order) => {
         </div>
         <div class="order-body">
           <div class="order-car-img">
-            <img v-if="order.carInfo?.carImage" :src="order.carInfo.carImage" @error="(e) => e.target.style.display='none'" />
+            <img v-if="primaryCarImage(order)" :src="primaryCarImage(order)" @error="(e) => e.target.style.display='none'" />
             <el-icon v-else size="28" style="color:var(--muted2);"><Van /></el-icon>
           </div>
           <div class="order-info">
@@ -316,7 +322,7 @@ const handleAction = (action, order) => {
           </div>
           <div class="detail-car-section">
             <div class="detail-car-img">
-              <img v-if="detailOrder.carInfo?.carImage" :src="detailOrder.carInfo.carImage" @error="(e) => e.target.style.display='none'" />
+              <img v-if="primaryCarImage(detailOrder)" :src="primaryCarImage(detailOrder)" @error="(e) => e.target.style.display='none'" />
               <el-icon v-else size="40" style="color:var(--muted2);"><Van /></el-icon>
             </div>
             <div class="detail-car-info">

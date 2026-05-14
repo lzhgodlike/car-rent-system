@@ -36,6 +36,9 @@ CREATE TABLE car_info (
     plate_number VARCHAR(30) NOT NULL UNIQUE,
     day_price DECIMAL(10,2) NOT NULL,
     mileage INT NOT NULL DEFAULT 0,
+    province VARCHAR(50),
+    city VARCHAR(50),
+    detail_address VARCHAR(255),
     pickup_address VARCHAR(255),
     car_image VARCHAR(255),
     status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE',
@@ -44,6 +47,18 @@ CREATE TABLE car_info (
 );
 
 DROP TABLE IF EXISTS rent_order;
+CREATE TABLE car_image (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    car_id BIGINT NOT NULL,
+    image_url VARCHAR(255) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    source_type VARCHAR(20) NOT NULL DEFAULT 'SERVER',
+    origin_url VARCHAR(500),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_car_image_car_id_sort (car_id, sort_order, id)
+);
+
 CREATE TABLE rent_order (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     order_no VARCHAR(50) NOT NULL UNIQUE,

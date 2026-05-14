@@ -7,10 +7,12 @@ import com.sdjzu.carrental.common.PageResult;
 import com.sdjzu.carrental.mapper.CarMapper;
 import com.sdjzu.carrental.mapper.FaultReportMapper;
 import com.sdjzu.carrental.mapper.RentOrderMapper;
+import com.sdjzu.carrental.mapper.UserMapper;
 import com.sdjzu.carrental.model.dto.CarInfo;
 import com.sdjzu.carrental.model.entity.Car;
 import com.sdjzu.carrental.model.entity.FaultReport;
 import com.sdjzu.carrental.model.entity.RentOrder;
+import com.sdjzu.carrental.model.entity.User;
 import com.sdjzu.carrental.model.request.FaultHandleRequest;
 import com.sdjzu.carrental.model.request.FaultReportRequest;
 import com.sdjzu.carrental.security.SecurityUtils;
@@ -31,13 +33,18 @@ public class FaultReportService {
     private final CarMapper carMapper;
     private final RentOrderMapper rentOrderMapper;
     private final RentOrderService rentOrderService;
+    private final UserMapper userMapper;
+    private final CarService carService;
 
     public FaultReportService(FaultReportMapper faultReportMapper, CarMapper carMapper,
-                              RentOrderMapper rentOrderMapper, RentOrderService rentOrderService) {
+                              RentOrderMapper rentOrderMapper, RentOrderService rentOrderService,
+                              UserMapper userMapper, CarService carService) {
         this.faultReportMapper = faultReportMapper;
         this.carMapper = carMapper;
         this.rentOrderMapper = rentOrderMapper;
         this.rentOrderService = rentOrderService;
+        this.userMapper = userMapper;
+        this.carService = carService;
     }
 
     @Transactional
@@ -80,7 +87,7 @@ public class FaultReportService {
         rentOrderService.recalculateCarStatus(request.getCarId());
     }
 
-    public PageResult<FaultReport> list(int pageNum, int pageSize, Long carId, String status) {
+    public PageResult<FaultReport> list(int pageNum, int pageSize, Long carId, String status, String keyword) {
         LambdaQueryWrapper<FaultReport> wrapper = new LambdaQueryWrapper<FaultReport>().orderByDesc(FaultReport::getId);
         if (carId != null) {
             wrapper.eq(FaultReport::getCarId, carId);
@@ -90,6 +97,29 @@ public class FaultReportService {
         }
         if (!SecurityUtils.isAdmin()) {
             wrapper.eq(FaultReport::getUserId, SecurityUtils.getUserId());
+        }
+        if (StringUtils.hasText(keyword)) {
+            List<Long> carIds = carMapper.selectList(
+                    new LambdaQueryWrapper<Car>()
+                            .like(Car::getBrand, keyword)
+                            .or().like(Car::getModel, keyword)
+                            .or().like(Car::getPlateNumber, keyword)
+                            .or().like(Car::getCarNo, keyword))
+                    .stream().map(Car::getId).collect(Collectors.toList());
+            List<Long> userIds = userMapper.selectList(
+                    new LambdaQueryWrapper<User>()
+                            .like(User::getUsername, keyword)
+                            .or().like(User::getRealName, keyword))
+                    .stream().map(User::getId).collect(Collectors.toList());
+            if (!carIds.isEmpty() || !userIds.isEmpty()) {
+                wrapper.and(w -> {
+                    if (!carIds.isEmpty()) w.in(FaultReport::getCarId, carIds);
+                    if (!carIds.isEmpty() && !userIds.isEmpty()) w.or();
+                    if (!userIds.isEmpty()) w.in(FaultReport::getUserId, userIds);
+                });
+            } else {
+                wrapper.apply("1=0");
+            }
         }
         Page<FaultReport> page = faultReportMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
         PageResult<FaultReport> result = PageResult.of(page);
@@ -107,20 +137,38 @@ public class FaultReportService {
                         .eq(carId != null, FaultReport::getCarId, carId)
                         .eq(!isAdmin, FaultReport::getUserId, SecurityUtils.getUserId())));
         enrichWithCarInfo(page.getRecords());
+        enrichWithReporterName(page.getRecords());
         return result;
     }
 
     private void enrichWithCarInfo(List<FaultReport> reports) {
         if (reports == null || reports.isEmpty()) return;
         List<Long> carIds = reports.stream().map(FaultReport::getCarId).distinct().collect(Collectors.toList());
-        Map<Long, Car> carMap = carMapper.selectBatchIds(carIds).stream()
-                .collect(Collectors.toMap(Car::getId, c -> c, (a, b) -> a));
+        List<Car> cars = carService.enrichCarsForDisplay(carMapper.selectBatchIds(carIds), true);
+        Map<Long, Car> carMap = cars.stream().collect(Collectors.toMap(Car::getId, c -> c, (a, b) -> a));
         for (FaultReport report : reports) {
             Car car = carMap.get(report.getCarId());
             if (car != null) {
                 CarInfo info = new CarInfo();
                 BeanUtils.copyProperties(car, info);
+                info.setCarImages(car.getCarImages() == null ? java.util.List.of() : car.getCarImages().stream()
+                        .map(image -> image.getImageUrl())
+                        .collect(Collectors.toList()));
                 report.setCarInfo(info);
+            }
+        }
+    }
+
+    private void enrichWithReporterName(List<FaultReport> reports) {
+        if (reports == null || reports.isEmpty()) return;
+        List<Long> userIds = reports.stream().map(FaultReport::getUserId).distinct().collect(Collectors.toList());
+        if (userIds.isEmpty()) return;
+        Map<Long, User> userMap = userMapper.selectBatchIds(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
+        for (FaultReport report : reports) {
+            User user = userMap.get(report.getUserId());
+            if (user != null) {
+                report.setReporterName(user.getUsername());
             }
         }
     }

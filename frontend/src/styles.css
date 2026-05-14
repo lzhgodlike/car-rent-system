@@ -136,6 +136,8 @@ input, select, textarea { font-family: inherit; }
 .btn-sm-warning:hover { background: rgba(212,130,10,0.18); }
 .btn-sm-ghost { background: none; border: 1px solid var(--border); color: var(--text); }
 .btn-sm-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-sm.btn-icon { padding: 6px; min-width: 32px; height: 32px; justify-content: center; }
+.btn-sm:disabled, .btn-sm[disabled] { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 
 /* Status badges */
 .status-badge {

@@ -15,12 +15,22 @@ function isPublicPage() {
   return path === '/home' || path === '/book' || path === '/login' || path === '/'
 }
 
+function isAdminPage() {
+  const path = router.currentRoute.value?.path || ''
+  return path.startsWith('/admin')
+}
+
 function redirectToLogin(message = '登录已失效，请重新登录') {
   if (redirectedForAuth) return
   redirectedForAuth = true
+  const isAdmin = isAdminPage()
   clearAuth()
-  ElMessage.error(message)
-  router.replace({ path: '/home', query: { login: 1 } }).finally(() => {
+  const target = isAdmin ? '/home' : { path: '/home', query: { login: 1 } }
+  router.replace(target).then(() => {
+    if (isAdmin) {
+      setTimeout(() => ElMessage.error(message), 300)
+    }
+  }).finally(() => {
     setTimeout(() => { redirectedForAuth = false }, 1000)
   })
 }
@@ -40,9 +50,8 @@ request.interceptors.request.use((config) => {
   const auth = getAuth()
   if (auth?.token) {
     if (isTokenExpired(auth.token)) {
-      // Token 过期：清除本地存储，但不跳转，让请求以无 token 方式继续
-      clearAuth()
-      return config
+      redirectToLogin()
+      return Promise.reject(new Error('登录已失效'))
     }
     config.headers.Authorization = `Bearer ${auth.token}`
   }
@@ -70,7 +79,6 @@ request.interceptors.response.use(
       redirectToLogin()
       return Promise.reject(error)
     }
-    // 公开页面的 401 不弹错误提示
     if (isPublicPage() && status === 401) {
       return Promise.reject(error)
     }

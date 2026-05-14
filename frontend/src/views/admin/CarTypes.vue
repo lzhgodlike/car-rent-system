@@ -54,10 +54,12 @@ const remove = async (row) => {
         <el-table-column prop="description" label="描述" min-width="280">
           <template #default="{ row }">{{ row.description || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="160">
+        <el-table-column label="操作" width="100">
           <template #default="{ row }">
-            <button class="btn-sm btn-sm-ghost" @click="openEdit(row)">编辑</button>
-            <button class="btn-sm btn-sm-danger" @click="remove(row)">删除</button>
+            <div style="display:flex;gap:6px;">
+              <button class="btn-sm btn-sm-ghost btn-icon" title="编辑" @click="openEdit(row)"><el-icon><Edit /></el-icon></button>
+              <button class="btn-sm btn-sm-danger btn-icon" title="删除" @click="remove(row)"><el-icon><Delete /></el-icon></button>
+            </div>
           </template>
         </el-table-column>
       </el-table>

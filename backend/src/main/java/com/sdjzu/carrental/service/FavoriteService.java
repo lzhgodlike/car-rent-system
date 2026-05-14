@@ -19,10 +19,12 @@ public class FavoriteService {
 
     private final FavoriteMapper favoriteMapper;
     private final CarMapper carMapper;
+    private final CarService carService;
 
-    public FavoriteService(FavoriteMapper favoriteMapper, CarMapper carMapper) {
+    public FavoriteService(FavoriteMapper favoriteMapper, CarMapper carMapper, CarService carService) {
         this.favoriteMapper = favoriteMapper;
         this.carMapper = carMapper;
+        this.carService = carService;
     }
 
     public void add(Long carId) {
@@ -73,7 +75,7 @@ public class FavoriteService {
         if (carIds.isEmpty()) {
             return Collections.emptyList();
         }
-        return carMapper.selectBatchIds(carIds);
+        return carService.enrichCarsForDisplay(carMapper.selectBatchIds(carIds), false);
     }
 
     public boolean isFavorite(Long carId) {

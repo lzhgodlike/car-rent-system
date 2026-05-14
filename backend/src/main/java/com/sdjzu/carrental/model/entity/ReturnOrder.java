@@ -32,4 +32,7 @@ public class ReturnOrder {
 
     @TableField(exist = false)
     private RentOrderBrief rentOrderBrief;
+
+    @TableField(exist = false)
+    private String renterName;
 }

@@ -48,16 +48,19 @@ public class RentOrderService {
     private final ReturnOrderMapper returnOrderMapper;
     private final FaultReportMapper faultReportMapper;
     private final UserMapper userMapper;
+    private final CarService carService;
 
     public RentOrderService(RentOrderMapper rentOrderMapper, CarMapper carMapper,
                             CarTypeMapper carTypeMapper, ReturnOrderMapper returnOrderMapper,
-                            FaultReportMapper faultReportMapper, UserMapper userMapper) {
+                            FaultReportMapper faultReportMapper, UserMapper userMapper,
+                            CarService carService) {
         this.rentOrderMapper = rentOrderMapper;
         this.carMapper = carMapper;
         this.carTypeMapper = carTypeMapper;
         this.returnOrderMapper = returnOrderMapper;
         this.faultReportMapper = faultReportMapper;
         this.userMapper = userMapper;
+        this.carService = carService;
     }
 
     @Transactional
@@ -155,12 +158,36 @@ public class RentOrderService {
         recalculateCarStatus(rentOrder.getCarId());
     }
 
-    public PageResult<RentOrder> list(int pageNum, int pageSize, Long carId, String status) {
-        Page<RentOrder> page = rentOrderMapper.selectPage(new Page<>(pageNum, pageSize),
-                new LambdaQueryWrapper<RentOrder>().orderByDesc(RentOrder::getId)
-                        .eq(carId != null, RentOrder::getCarId, carId)
-                        .eq(StringUtils.hasText(status), RentOrder::getOrderStatus, status)
-                        .eq(!SecurityUtils.isAdmin(), RentOrder::getUserId, SecurityUtils.getUserId()));
+    public PageResult<RentOrder> list(int pageNum, int pageSize, Long carId, String status, String keyword) {
+        LambdaQueryWrapper<RentOrder> wrapper = new LambdaQueryWrapper<RentOrder>().orderByDesc(RentOrder::getId)
+                .eq(carId != null, RentOrder::getCarId, carId)
+                .eq(StringUtils.hasText(status), RentOrder::getOrderStatus, status)
+                .eq(!SecurityUtils.isAdmin(), RentOrder::getUserId, SecurityUtils.getUserId());
+
+        if (StringUtils.hasText(keyword)) {
+            List<Long> matchedCarIds = carMapper.selectList(
+                    new LambdaQueryWrapper<Car>()
+                            .like(Car::getBrand, keyword)
+                            .or().like(Car::getModel, keyword)
+                            .or().like(Car::getPlateNumber, keyword))
+                    .stream().map(Car::getId).collect(Collectors.toList());
+            List<Long> matchedUserIds = userMapper.selectList(
+                    new LambdaQueryWrapper<User>()
+                            .like(User::getUsername, keyword)
+                            .or().like(User::getRealName, keyword))
+                    .stream().map(User::getId).collect(Collectors.toList());
+            if (!matchedCarIds.isEmpty() || !matchedUserIds.isEmpty()) {
+                wrapper.and(w -> {
+                    w.like(RentOrder::getOrderNo, keyword);
+                    if (!matchedCarIds.isEmpty()) w.or().in(RentOrder::getCarId, matchedCarIds);
+                    if (!matchedUserIds.isEmpty()) w.or().in(RentOrder::getUserId, matchedUserIds);
+                });
+            } else {
+                wrapper.and(w -> w.like(RentOrder::getOrderNo, keyword));
+            }
+        }
+
+        Page<RentOrder> page = rentOrderMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
         PageResult<RentOrder> result = PageResult.of(page);
 
         boolean isAdmin = SecurityUtils.isAdmin();
@@ -266,9 +293,8 @@ public class RentOrderService {
     private void enrichWithCarInfo(List<RentOrder> orders) {
         if (orders == null || orders.isEmpty()) return;
         List<Long> carIds = orders.stream().map(RentOrder::getCarId).distinct().collect(Collectors.toList());
-        Map<Long, Car> carMap = carMapper.selectBatchIds(carIds).stream()
-                .collect(Collectors.toMap(Car::getId, c -> c, (a, b) -> a));
-        // 查询车型名称
+        List<Car> cars = carService.enrichCarsForDisplay(carMapper.selectBatchIds(carIds), true);
+        Map<Long, Car> carMap = cars.stream().collect(Collectors.toMap(Car::getId, c -> c, (a, b) -> a));
         List<Long> typeIds = carMap.values().stream().map(Car::getTypeId).filter(id -> id != null).distinct().collect(Collectors.toList());
         Map<Long, String> typeNameMap = typeIds.isEmpty() ? java.util.Collections.emptyMap() :
                 carTypeMapper.selectBatchIds(typeIds).stream()
@@ -279,6 +305,9 @@ public class RentOrderService {
                 CarInfo info = new CarInfo();
                 BeanUtils.copyProperties(car, info);
                 info.setTypeName(typeNameMap.get(car.getTypeId()));
+                info.setCarImages(car.getCarImages() == null ? java.util.List.of() : car.getCarImages().stream()
+                        .map(image -> image.getImageUrl())
+                        .collect(Collectors.toList()));
                 order.setCarInfo(info);
             }
         }

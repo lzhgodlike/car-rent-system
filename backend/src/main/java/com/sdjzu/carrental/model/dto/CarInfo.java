@@ -3,6 +3,7 @@ package com.sdjzu.carrental.model.dto;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Data
 public class CarInfo {
@@ -15,7 +16,11 @@ public class CarInfo {
     private String plateNumber;
     private BigDecimal dayPrice;
     private Integer mileage;
+    private String province;
+    private String city;
+    private String detailAddress;
     private String pickupAddress;
     private String carImage;
+    private List<String> carImages;
     private String status;
 }

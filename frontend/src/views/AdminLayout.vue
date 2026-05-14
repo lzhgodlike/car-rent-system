@@ -84,7 +84,6 @@ const logout = () => {
           <h1 class="header-title">{{ pageTitle }}</h1>
         </div>
         <div class="header-right">
-          <el-input class="header-search" placeholder="搜索车辆、订单、客户…" prefix-icon="Search" clearable />
           <el-badge :value="3" :max="99" class="notif-badge">
             <el-button :icon="Bell" circle />
           </el-badge>

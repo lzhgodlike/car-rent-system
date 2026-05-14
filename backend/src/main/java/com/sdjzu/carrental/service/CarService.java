@@ -4,14 +4,20 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sdjzu.carrental.common.BusinessException;
 import com.sdjzu.carrental.common.PageResult;
+import com.sdjzu.carrental.mapper.CarImageMapper;
 import com.sdjzu.carrental.mapper.CarMapper;
 import com.sdjzu.carrental.model.entity.Car;
+import com.sdjzu.carrental.model.entity.CarImage;
+import com.sdjzu.carrental.model.request.CarImageItemRequest;
 import com.sdjzu.carrental.model.request.CarRequest;
 import com.sdjzu.carrental.security.SecurityUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -20,9 +26,11 @@ import java.util.stream.Collectors;
 public class CarService {
 
     private final CarMapper carMapper;
+    private final CarImageMapper carImageMapper;
 
-    public CarService(CarMapper carMapper) {
+    public CarService(CarMapper carMapper, CarImageMapper carImageMapper) {
         this.carMapper = carMapper;
+        this.carImageMapper = carImageMapper;
     }
 
     public List<String> listBrands() {
@@ -30,21 +38,34 @@ public class CarService {
                 .stream().map(Car::getBrand).collect(Collectors.toList());
     }
 
-    public PageResult<Car> list(String brand, Long typeId, String status, String sort, String keyword, int pageNum, int pageSize) {
+    public List<String> listCities() {
+        return carMapper.selectList(new LambdaQueryWrapper<Car>()
+                        .select(Car::getCity)
+                        .eq(Car::getStatus, "AVAILABLE")
+                        .isNotNull(Car::getCity)
+                        .ne(Car::getCity, "")
+                        .groupBy(Car::getCity))
+                .stream()
+                .map(Car::getCity)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toList());
+    }
+
+    public PageResult<Car> list(String brand, Long typeId, String city, String status, String sort, String keyword, int pageNum, int pageSize) {
         Page<Car> page;
         if ("rentCount".equals(sort) || "totalIncome".equals(sort)) {
             String orderCol = "rentCount".equals(sort) ? "s.cnt" : "s.income";
             int offset = (pageNum - 1) * pageSize;
-            long total = carMapper.selectFilteredCount(brand, typeId, status);
-            List<Car> cars = carMapper.selectWithRentalStats(brand, typeId, status, orderCol, "DESC", offset, pageSize);
+            long total = carMapper.selectFilteredCount(brand, typeId, city, status);
+            List<Car> cars = carMapper.selectWithRentalStats(brand, typeId, city, status, orderCol, "DESC", offset, pageSize);
             page = new Page<>(pageNum, pageSize, total);
             page.setRecords(cars);
         } else {
             LambdaQueryWrapper<Car> wrapper = new LambdaQueryWrapper<Car>()
                     .like(StringUtils.hasText(brand), Car::getBrand, brand)
                     .eq(typeId != null, Car::getTypeId, typeId)
+                    .eq(StringUtils.hasText(city), Car::getCity, city)
                     .eq(StringUtils.hasText(status), Car::getStatus, status);
-            // 关键词搜索：匹配品牌、型号、车牌号
             if (StringUtils.hasText(keyword)) {
                 wrapper.and(w -> w
                         .like(Car::getBrand, keyword)
@@ -62,6 +83,7 @@ public class CarService {
             page = carMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
         }
         enrichWithRentalStats(page.getRecords());
+        attachImages(page.getRecords(), false);
         PageResult<Car> result = PageResult.of(page);
         result.summary("totalCount", carMapper.selectCount(null));
         result.summary("available", carMapper.selectCount(new LambdaQueryWrapper<Car>().eq(Car::getStatus, "AVAILABLE")));
@@ -77,6 +99,8 @@ public class CarService {
         if (cars == null || cars.isEmpty()) return;
         Map<Long, Map<String, Object>> statsMap = carMapper.selectRentalStats().stream()
                 .collect(Collectors.toMap(m -> ((Number) m.get("carId")).longValue(), m -> m, (a, b) -> a));
+        Map<Long, String> renterMap = carMapper.selectCurrentRenters().stream()
+                .collect(Collectors.toMap(m -> ((Number) m.get("carId")).longValue(), m -> (String) m.get("renterName"), (a, b) -> a));
         for (Car car : cars) {
             Map<String, Object> stats = statsMap.get(car.getId());
             if (stats != null) {
@@ -86,6 +110,7 @@ public class CarService {
                 car.setRentCount(0);
                 car.setTotalIncome(java.math.BigDecimal.ZERO);
             }
+            car.setCurrentRenterName(renterMap.get(car.getId()));
         }
     }
 
@@ -94,29 +119,41 @@ public class CarService {
         if (car == null) {
             throw new BusinessException("车辆不存在");
         }
+        attachImages(List.of(car), true);
         return car;
     }
 
+    @Transactional
     public void add(CarRequest request) {
         SecurityUtils.requireAdmin();
         Car car = new Car();
         BeanUtils.copyProperties(request, car);
+        car.setCarNo("TEMP");
+        car.setPickupAddress(buildPickupAddress(request.getProvince(), request.getCity(), request.getDetailAddress()));
+        car.setCarImage(null);
         car.setStatus("AVAILABLE");
         carMapper.insert(car);
+        car.setCarNo(generateCarNo(car.getId()));
+        carMapper.updateById(car);
+        saveCarImages(car.getId(), request.getImages());
     }
 
+    @Transactional
     public void update(Long id, CarRequest request) {
         SecurityUtils.requireAdmin();
         Car existing = carMapper.selectById(id);
         if (existing == null) {
             throw new BusinessException("车辆不存在");
         }
-        // 不通过此接口修改状态，状态由系统自动推导
         Car car = new Car();
         BeanUtils.copyProperties(request, car);
         car.setId(id);
-        car.setStatus(existing.getStatus()); // 保持原状态
+        car.setCarNo(existing.getCarNo());
+        car.setPickupAddress(buildPickupAddress(request.getProvince(), request.getCity(), request.getDetailAddress()));
+        car.setCarImage(existing.getCarImage());
+        car.setStatus(existing.getStatus());
         carMapper.updateById(car);
+        saveCarImages(id, request.getImages());
     }
 
     public void delete(Long id) {
@@ -128,12 +165,10 @@ public class CarService {
         if (!"AVAILABLE".equals(car.getStatus()) && !"DISABLED".equals(car.getStatus())) {
             throw new BusinessException("只能删除空闲或停用状态的车辆，当前状态: " + car.getStatus());
         }
+        carImageMapper.delete(new LambdaQueryWrapper<CarImage>().eq(CarImage::getCarId, id));
         carMapper.deleteById(id);
     }
 
-    /**
-     * 管理员停用车辆
-     */
     public void disable(Long id) {
         SecurityUtils.requireAdmin();
         Car car = carMapper.selectById(id);
@@ -147,9 +182,6 @@ public class CarService {
         carMapper.updateById(car);
     }
 
-    /**
-     * 管理员启用车辆（恢复为空闲，后续由系统根据订单/工单自动推导）
-     */
     public void enable(Long id) {
         SecurityUtils.requireAdmin();
         Car car = carMapper.selectById(id);
@@ -161,5 +193,57 @@ public class CarService {
         }
         car.setStatus("AVAILABLE");
         carMapper.updateById(car);
+    }
+
+    public List<Car> enrichCarsForDisplay(List<Car> cars, boolean includeImages) {
+        attachImages(cars, includeImages);
+        return cars;
+    }
+
+    private void attachImages(List<Car> cars, boolean includeImages) {
+        if (cars == null || cars.isEmpty()) return;
+        List<Long> carIds = cars.stream().map(Car::getId).toList();
+        List<CarImage> images = carImageMapper.selectList(new LambdaQueryWrapper<CarImage>()
+                .in(CarImage::getCarId, carIds)
+                .orderByAsc(CarImage::getSortOrder)
+                .orderByAsc(CarImage::getId));
+        Map<Long, List<CarImage>> imageMap = images.stream().collect(Collectors.groupingBy(CarImage::getCarId));
+        for (Car car : cars) {
+            List<CarImage> carImages = new ArrayList<>(imageMap.getOrDefault(car.getId(), List.of()));
+            if (!carImages.isEmpty()) {
+                car.setCarImage(carImages.get(0).getImageUrl());
+            }
+            if (includeImages) {
+                car.setCarImages(carImages);
+            }
+        }
+    }
+
+    private void saveCarImages(Long carId, List<CarImageItemRequest> images) {
+        List<CarImageItemRequest> sortedImages = images.stream()
+                .sorted(Comparator.comparing(CarImageItemRequest::getSortOrder))
+                .toList();
+        carImageMapper.delete(new LambdaQueryWrapper<CarImage>().eq(CarImage::getCarId, carId));
+        for (CarImageItemRequest item : sortedImages) {
+            CarImage image = new CarImage();
+            image.setCarId(carId);
+            image.setImageUrl(item.getImageUrl());
+            image.setSortOrder(item.getSortOrder());
+            image.setSourceType(item.getImageUrl().startsWith("/static/") ? "SERVER" : "URL_IMPORT");
+            image.setOriginUrl(item.getImageUrl());
+            carImageMapper.insert(image);
+        }
+        Car update = new Car();
+        update.setId(carId);
+        update.setCarImage(sortedImages.isEmpty() ? null : sortedImages.get(0).getImageUrl());
+        carMapper.updateById(update);
+    }
+
+    private String buildPickupAddress(String province, String city, String detailAddress) {
+        return province + city + detailAddress;
+    }
+
+    private String generateCarNo(Long id) {
+        return String.format("CAR%06d", id);
     }
 }

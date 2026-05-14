@@ -1,7 +1,8 @@
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Star, StarFilled } from '@element-plus/icons-vue'
 import request from '../../utils/request'
 import { useAuth, openLoginModal } from '../../utils/auth'
 
@@ -33,15 +34,31 @@ const router = useRouter()
 const pageReady = ref(false)
 const cars = ref([])
 const carTypes = ref([])
+const cities = ref([])
 const totalCount = ref(0)
 const detailVisible = ref(false)
 const detailCar = ref(null)
+const imageZoomVisible = ref(false)
 const showBackToTop = ref(false)
 const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
 
-const today = new Date().toISOString().split('T')[0]
-const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
-const searchForm = ref({ city: '郑州市', pickDate: today, dropDate: tomorrow, typeId: '' })
+const formatDate = (date) => {
+  const current = new Date(date)
+  const year = current.getFullYear()
+  const month = `${current.getMonth() + 1}`.padStart(2, '0')
+  const day = `${current.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+const getStartOfToday = () => {
+  const date = new Date()
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+const today = formatDate(getStartOfToday())
+const tomorrowDate = new Date(getStartOfToday())
+tomorrowDate.setDate(tomorrowDate.getDate() + 1)
+const tomorrow = formatDate(tomorrowDate)
+const searchForm = ref({ city: '', pickDate: today, dropDate: tomorrow, typeId: '' })
 const { isLoggedIn } = useAuth()
 
 const onScroll = () => { showBackToTop.value = window.scrollY > 300 }
@@ -50,8 +67,13 @@ onMounted(async () => {
   pageReady.value = false
   await nextTick()
   pageReady.value = true
-  carTypes.value = await request.get('/car-types')
-  const page = await request.get('/cars', { params: { pageNum: 1, pageSize: 6, sort: 'rentCount', status: 'AVAILABLE' } })
+  const [typeList, cityList, page] = await Promise.all([
+    request.get('/car-types'),
+    request.get('/cars/cities'),
+    request.get('/cars', { params: { pageNum: 1, pageSize: 6, sort: 'rentCount', status: 'AVAILABLE' } })
+  ])
+  carTypes.value = typeList
+  cities.value = cityList
   cars.value = page.records
   totalCount.value = page.total
   if (isLoggedIn.value) loadFavorites()
@@ -60,7 +82,66 @@ onMounted(async () => {
 onUnmounted(() => { window.removeEventListener('scroll', onScroll) })
 
 const carTypeName = (typeId) => carTypes.value.find(t => t.id === typeId)?.typeName || '-'
-const openDetail = (car) => { detailCar.value = car; detailVisible.value = true }
+const disablePickDate = (date) => {
+  const current = new Date(date)
+  current.setHours(0, 0, 0, 0)
+  return current < getStartOfToday()
+}
+const disableDropDate = (date) => {
+  const current = new Date(date)
+  current.setHours(0, 0, 0, 0)
+  const minDate = new Date(`${searchForm.value.pickDate || today}T00:00:00`)
+  return current <= minDate
+}
+const syncDropDate = (pickDate) => {
+  if (!pickDate) return
+  if (!searchForm.value.dropDate || searchForm.value.dropDate <= pickDate) {
+    const nextDay = new Date(`${pickDate}T00:00:00`)
+    nextDay.setDate(nextDay.getDate() + 1)
+    searchForm.value.dropDate = formatDate(nextDay)
+  }
+}
+const handleSearch = () => {
+  const query = {}
+  if (searchForm.value.city) query.city = searchForm.value.city
+  if (searchForm.value.pickDate) query.pickDate = searchForm.value.pickDate
+  if (searchForm.value.dropDate) query.dropDate = searchForm.value.dropDate
+  if (searchForm.value.typeId) query.typeId = searchForm.value.typeId
+  router.push({ path: '/book', query })
+}
+watch(() => searchForm.value.pickDate, (pickDate) => {
+  syncDropDate(pickDate)
+})
+const detailImages = computed(() => {
+  const images = detailCar.value?.carImages || []
+  const normalizedImages = images
+    .map(image => image?.imageUrl || image)
+    .filter(Boolean)
+  if (normalizedImages.length) return normalizedImages
+  return detailCar.value?.carImage ? [detailCar.value.carImage] : []
+})
+const detailActiveImageIndex = ref(0)
+const detailActiveImage = computed(() => detailImages.value[detailActiveImageIndex.value] || '')
+const hasMultipleDetailImages = computed(() => detailImages.value.length > 1)
+const openDetail = async (car) => {
+  detailCar.value = await request.get(`/cars/${car.id}`)
+  detailActiveImageIndex.value = 0
+  detailVisible.value = true
+}
+const selectDetailImage = (index) => {
+  detailActiveImageIndex.value = index
+}
+const prevDetailImage = () => {
+  if (!hasMultipleDetailImages.value) return
+  detailActiveImageIndex.value = (detailActiveImageIndex.value - 1 + detailImages.value.length) % detailImages.value.length
+}
+const nextDetailImage = () => {
+  if (!hasMultipleDetailImages.value) return
+  detailActiveImageIndex.value = (detailActiveImageIndex.value + 1) % detailImages.value.length
+}
+const openImageZoom = () => {
+  if (detailActiveImage.value) imageZoomVisible.value = true
+}
 </script>
 
 <template>
@@ -90,18 +171,18 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
         <div class="search-field">
           <label><el-icon><Location /></el-icon> 取车城市</label>
           <el-select v-model="searchForm.city" style="width:100%">
-            <el-option label="郑州市" value="郑州市" /><el-option label="北京市" value="北京市" /><el-option label="上海市" value="上海市" />
+            <el-option v-for="city in cities" :key="city" :label="city" :value="city" />
           </el-select>
         </div>
         <div class="search-divider"></div>
         <div class="search-field">
           <label><el-icon><Calendar /></el-icon> 取车日期</label>
-          <el-date-picker v-model="searchForm.pickDate" type="date" value-format="YYYY-MM-DD" style="width:100%" />
+          <el-date-picker v-model="searchForm.pickDate" type="date" value-format="YYYY-MM-DD" style="width:100%" :disabled-date="disablePickDate" :editable="false" />
         </div>
         <div class="search-divider"></div>
         <div class="search-field">
           <label><el-icon><Calendar /></el-icon> 还车日期</label>
-          <el-date-picker v-model="searchForm.dropDate" type="date" value-format="YYYY-MM-DD" style="width:100%" />
+          <el-date-picker v-model="searchForm.dropDate" type="date" value-format="YYYY-MM-DD" style="width:100%" :disabled-date="disableDropDate" :editable="false" />
         </div>
         <div class="search-divider"></div>
         <div class="search-field" style="max-width:130px;">
@@ -111,7 +192,7 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
             <el-option v-for="t in carTypes" :key="t.id" :label="t.typeName" :value="t.id" />
           </el-select>
         </div>
-        <button class="search-btn" @click="router.push('/book')"><el-icon><Search /></el-icon> 搜索</button>
+        <button class="search-btn" @click="handleSearch"><el-icon><Search /></el-icon> 搜索</button>
       </div>
     </section>
 
@@ -127,7 +208,9 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
             <div class="car-img-placeholder"><el-icon size="32" style="color:var(--muted2);"><Van /></el-icon></div>
             <img v-if="car.carImage" :src="car.carImage" :alt="`${car.brand} ${car.model}`" loading="lazy" class="car-img-el" @load="(e) => e.target.classList.add('loaded')" @error="(e) => e.target.style.display='none'" />
             <div class="car-tag">{{ carTypeName(car.typeId) }}</div>
-            <div class="car-fav" :class="{ liked: favoriteIds.has(car.id) }" @click.stop="toggleFavorite(car)"><el-icon><Star /></el-icon></div>
+            <div class="car-fav" :class="{ liked: favoriteIds.has(car.id) }" @click.stop="toggleFavorite(car)">
+              <el-icon><component :is="favoriteIds.has(car.id) ? StarFilled : Star" /></el-icon>
+            </div>
           </div>
           <div class="car-body">
             <div class="car-name">{{ car.brand }} {{ car.model }}</div>
@@ -135,8 +218,8 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
             <div class="car-features">
               <div class="car-feat"><el-icon><User /></el-icon> 5座</div>
               <div class="car-feat"><el-icon><OfficeBuilding /></el-icon> {{ carTypeName(car.typeId) }}</div>
-              <div class="car-feat"><el-icon><Location /></el-icon> {{ car.pickupAddress || '待补充' }}</div>
             </div>
+            <div class="car-location"><el-icon><Location /></el-icon><span>{{ car.pickupAddress || '待补充' }}</span></div>
           </div>
           <div class="car-footer">
             <div class="car-price"><span>¥{{ car.dayPrice }}</span><small>/天</small></div>
@@ -176,9 +259,24 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
           <button class="detail-close" @click="detailVisible = false"><el-icon><Close /></el-icon></button>
         </div>
         <div class="detail-body" v-if="detailCar">
-          <div class="detail-img-wrap">
-            <img v-if="detailCar.carImage" :src="detailCar.carImage" class="detail-img" @error="(e) => e.target.style.display='none'" />
-            <div v-else class="detail-img-placeholder"><el-icon size="48" style="color:var(--muted2);"><Van /></el-icon></div>
+          <div class="detail-gallery-block">
+            <div class="detail-img-wrap" @click="openImageZoom">
+              <button v-if="hasMultipleDetailImages" class="gallery-arrow gallery-arrow-left" @click.stop="prevDetailImage"><el-icon><ArrowLeft /></el-icon></button>
+              <img v-if="detailActiveImage" :src="detailActiveImage" class="detail-img" @error="(e) => e.target.style.display='none'" />
+              <div v-else class="detail-img-placeholder"><el-icon size="48" style="color:var(--muted2);"><Van /></el-icon></div>
+              <button v-if="hasMultipleDetailImages" class="gallery-arrow gallery-arrow-right" @click.stop="nextDetailImage"><el-icon><ArrowRight /></el-icon></button>
+            </div>
+          </div>
+          <div v-if="detailImages.length > 1" class="detail-thumbs">
+            <button
+              v-for="(image, index) in detailImages"
+              :key="`${image}-${index}`"
+              class="detail-thumb"
+              :class="{ active: index === detailActiveImageIndex }"
+              @click.stop="selectDetailImage(index)"
+            >
+              <img :src="image" />
+            </button>
           </div>
           <div class="detail-stats">
             <div class="detail-stat"><el-icon size="18" style="color:var(--accent);"><User /></el-icon><span>5座</span></div>
@@ -203,6 +301,28 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
           </div>
           <button class="detail-book-btn" @click="detailVisible=false;router.push({ path: '/book', query: { carId: detailCar.id } })">
             <el-icon><Check /></el-icon> 立即预订
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="imageZoomVisible" class="zoom-overlay" @click="imageZoomVisible = false">
+      <div class="zoom-panel" @click.stop>
+        <div class="zoom-main">
+          <button class="gallery-arrow zoom-arrow zoom-close" @click="imageZoomVisible = false"><el-icon><Close /></el-icon></button>
+          <button v-if="hasMultipleDetailImages" class="gallery-arrow gallery-arrow-left zoom-arrow" @click.stop="prevDetailImage"><el-icon><ArrowLeft /></el-icon></button>
+          <img :src="detailActiveImage" class="zoom-img" :alt="`${detailCar?.brand || ''} ${detailCar?.model || ''}`" />
+          <button v-if="hasMultipleDetailImages" class="gallery-arrow gallery-arrow-right zoom-arrow" @click.stop="nextDetailImage"><el-icon><ArrowRight /></el-icon></button>
+        </div>
+        <div v-if="detailImages.length > 1" class="zoom-thumbs">
+          <button
+            v-for="(image, index) in detailImages"
+            :key="`zoom-${image}-${index}`"
+            class="detail-thumb zoom-thumb"
+            :class="{ active: index === detailActiveImageIndex }"
+            @click.stop="selectDetailImage(index)"
+          >
+            <img :src="image" />
           </button>
         </div>
       </div>
@@ -326,13 +446,36 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
   font-size: 15px; color: var(--muted);
 }
 .car-fav:hover { color: var(--accent); }
-.car-fav.liked { color: var(--accent); }
+.car-fav.liked {
+  color: var(--accent);
+  background: #fff1f0;
+}
+.car-fav.liked :deep(svg) {
+  fill: currentColor;
+}
 .car-body { padding: 16px 18px; }
 .car-name { font-size: 16px; font-weight: 500; }
 .car-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
 .car-features { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .car-feat { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); background: var(--bg); padding: 3px 9px; border-radius: 20px; }
 .car-feat .el-icon { font-size: 12px; }
+.car-location {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.car-location .el-icon {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.car-location span {
+  min-width: 0;
+  word-break: break-all;
+}
 .car-footer { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-top: 1px solid var(--border); }
 .car-price { font-family: 'Bebas Neue', monospace; }
 .car-price span { font-size: 22px; font-weight: 500; color: var(--accent); }
@@ -414,11 +557,106 @@ const openDetail = (car) => { detailCar.value = car; detailVisible.value = true 
 .detail-close { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 20px; padding: 4px; transition: color .15s; }
 .detail-close:hover { color: var(--text); }
 .detail-body { padding: 24px; }
+.detail-gallery-block { margin-bottom: 20px; }
 .detail-img-wrap {
-  border-radius: 12px; overflow: hidden; background: var(--bg); margin-bottom: 20px;
+  position: relative;
+  border-radius: 12px; overflow: hidden; background: var(--bg); margin-bottom: 12px;
+  cursor: pointer;
 }
 .detail-img { width: 100%; height: 200px; object-fit: cover; display: block; }
 .detail-img-placeholder { height: 200px; display: flex; align-items: center; justify-content: center; }
+.detail-thumbs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.detail-thumb {
+  width: 72px;
+  height: 52px;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--white);
+  cursor: pointer;
+}
+.detail-thumb.active {
+  border-color: var(--accent);
+}
+.detail-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gallery-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.58);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+}
+.gallery-arrow-left { left: 12px; }
+.gallery-arrow-right { right: 12px; }
+.zoom-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.88); display: flex;
+  align-items: center; justify-content: center;
+  animation: fadeIn .2s ease;
+}
+.zoom-panel {
+  width: min(92vw, 1120px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.zoom-main {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(92vw, 1120px);
+  height: min(72vh, 760px);
+  padding: 24px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 16px;
+  box-sizing: border-box;
+}
+.zoom-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+}
+.zoom-thumbs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.zoom-thumb {
+  background: rgba(255,255,255,0.08);
+}
+.zoom-arrow {
+  background: rgba(255,255,255,0.18);
+  backdrop-filter: blur(8px);
+}
+.zoom-close {
+  top: 12px;
+  right: 12px;
+  left: auto;
+  transform: none;
+  z-index: 2;
+}
 .detail-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
 .detail-stat { text-align: center; padding: 12px; background: var(--bg); border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .detail-stat span { font-size: 12px; color: var(--muted); }

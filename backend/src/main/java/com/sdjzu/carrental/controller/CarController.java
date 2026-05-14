@@ -31,17 +31,23 @@ public class CarController {
     @GetMapping
     public ApiResponse<PageResult<Car>> list(@RequestParam(required = false) String brand,
                                               @RequestParam(required = false) Long typeId,
+                                              @RequestParam(required = false) String city,
                                               @RequestParam(required = false) String status,
                                               @RequestParam(required = false) String sort,
                                               @RequestParam(required = false) String keyword,
                                               @RequestParam(defaultValue = "1") int pageNum,
                                               @RequestParam(defaultValue = "10") int pageSize) {
-        return ApiResponse.success(carService.list(brand, typeId, status, sort, keyword, pageNum, pageSize));
+        return ApiResponse.success(carService.list(brand, typeId, city, status, sort, keyword, pageNum, pageSize));
     }
 
     @GetMapping("/brands")
     public ApiResponse<List<String>> brands() {
         return ApiResponse.success(carService.listBrands());
+    }
+
+    @GetMapping("/cities")
+    public ApiResponse<List<String>> cities() {
+        return ApiResponse.success(carService.listCities());
     }
 
     @GetMapping("/{id}")

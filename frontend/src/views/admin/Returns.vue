@@ -14,6 +14,7 @@ const currentId = ref(null)
 const confirmForm = ref({ extraFee: 0 })
 const currentReturn = computed(() => records.value.find(r => r.id === currentId.value))
 const filterStatus = ref('')
+const keyword = ref('')
 
 const statusOptions = { PENDING: '待确认', CONFIRMED: '已确认' }
 const carName = (row) => row.carInfo ? `${row.carInfo.brand} ${row.carInfo.model}` : '-'
@@ -22,11 +23,14 @@ const plateNo = (row) => row.carInfo?.plateNumber || '-'
 const loadData = async () => {
   loading.value = true
   try {
-    const page = await request.get('/return-orders', { params: { pageNum: currentPage.value, pageSize: pageSize.value, status: filterStatus.value || undefined } })
+    const page = await request.get('/return-orders', { params: { pageNum: currentPage.value, pageSize: pageSize.value, status: filterStatus.value || undefined, keyword: keyword.value || undefined } })
     records.value = page.records; total.value = page.total; summary.value = page.summary || {}
   } finally { loading.value = false }
 }
 const onFilterChange = () => { currentPage.value = 1; loadData() }
+const onReset = () => { keyword.value = ''; filterStatus.value = ''; currentPage.value = 1; loadData() }
+let searchTimer = null
+const onKeywordChange = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { currentPage.value = 1; loadData() }, 300) }
 onMounted(loadData)
 
 const openConfirm = (row) => { currentId.value = row.id; confirmForm.value = { extraFee: row.extraFee || 0 }; confirmDialog.value = true }
@@ -44,14 +48,21 @@ const doConfirm = async () => {
         <span class="sum-item">待确认 <strong>{{ summary.pending ?? 0 }}</strong></span>
         <span class="sum-item">已确认 <strong>{{ summary.confirmed ?? 0 }}</strong></span>
       </div>
-      <el-select v-model="filterStatus" placeholder="筛选状态" clearable size="small" style="width:120px;" @change="onFilterChange">
-        <el-option v-for="(label, key) in statusOptions" :key="key" :label="label" :value="key" />
-      </el-select>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <el-input v-model="keyword" placeholder="搜索用户名、车辆、车牌号…" clearable size="small" style="width:220px;" @input="onKeywordChange" @clear="onKeywordChange" />
+        <el-select v-model="filterStatus" placeholder="筛选状态" clearable size="small" style="width:120px;" @change="onFilterChange">
+          <el-option v-for="(label, key) in statusOptions" :key="key" :label="label" :value="key" />
+        </el-select>
+        <button class="btn-sm btn-sm-ghost" @click="onReset"><el-icon><RefreshLeft /></el-icon></button>
+      </div>
     </div>
     <div class="card">
       <el-table :data="records" v-loading="loading">
         <el-table-column label="车辆" min-width="180">
           <template #default="{row}"><div style="font-weight:500;">{{ carName(row) }}</div><div style="font-size:11px;color:var(--muted);">{{ plateNo(row) }}</div></template>
+        </el-table-column>
+        <el-table-column label="租车用户" width="120">
+          <template #default="{row}">{{ row.renterName || '-' }}</template>
         </el-table-column>
         <el-table-column label="原租期" min-width="180">
           <template #default="{row}"><div>{{ row.rentOrderBrief?.rentDate }} 至 {{ row.rentOrderBrief?.expectedReturnDate }}</div><div style="font-size:11px;color:var(--muted);">共 {{ row.rentOrderBrief?.rentDays }} 天</div></template>
@@ -90,7 +101,7 @@ const doConfirm = async () => {
 </template>
 
 <style scoped>
-.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
 .summary-strip { display: flex; gap: 16px; }
 .sum-item { font-size: 12px; color: var(--muted); }
 .sum-item strong { color: var(--text); margin-left: 4px; }
@@ -99,4 +110,6 @@ const doConfirm = async () => {
 .confirm-info { padding: 16px; border-radius: 8px; background: var(--surface2); display: grid; gap: 12px; }
 .info-row { display: flex; justify-content: space-between; align-items: center; }
 .info-row span { font-size: 13px; color: var(--muted); }
+:deep(.el-input--small) { --el-input-bg-color: var(--surface2); --el-input-border-color: var(--border); --el-input-hover-border-color: var(--accent); --el-input-focus-border-color: var(--accent); }
+:deep(.el-select--small) { --el-select-input-bg-color: var(--surface2); --el-select-border-color: var(--border); }
 </style>

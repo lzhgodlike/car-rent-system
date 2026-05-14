@@ -1,7 +1,8 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Star, StarFilled } from '@element-plus/icons-vue'
 import request from '../../utils/request'
 import { getAuth, useAuth, openLoginModal } from '../../utils/auth'
 
@@ -35,18 +36,37 @@ const toggleFavorite = async (e, car) => {
 
 const cars = ref([])
 const carTypes = ref([])
+const cities = ref([])
 const loading = ref(false)
 const loadingMore = ref(false)
 const hasMore = ref(true)
 const pageNum = ref(1)
 const pageSize = 6
 const selectedCar = ref(null)
-const rentForm = ref({ rentDate: '', expectedReturnDate: '', remark: '' })
+const formatDate = (date) => {
+  const current = new Date(date)
+  const year = current.getFullYear()
+  const month = `${current.getMonth() + 1}`.padStart(2, '0')
+  const day = `${current.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+const getStartOfToday = () => {
+  const date = new Date()
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+const today = formatDate(getStartOfToday())
+const tomorrow = (() => {
+  const date = new Date(getStartOfToday())
+  date.setDate(date.getDate() + 1)
+  return formatDate(date)
+})()
+const rentForm = ref({ rentDate: today, expectedReturnDate: tomorrow, remark: '' })
 const activeType = ref('')
 const keyword = ref('')
 const sort = ref('')
 const typeId = ref('')
-const today = new Date().toISOString().split('T')[0]
+const city = ref('')
 const toastMsg = ref('')
 const toastVisible = ref(false)
 const profileTipVisible = ref(false)
@@ -57,8 +77,49 @@ let scrollTimer = null
 const detailVisible = ref(false)
 const detailCar = ref(null)
 const imageZoomVisible = ref(false)
+const activeImageIndex = ref(0)
+
+const carImages = computed(() => {
+  const images = detailCar.value?.carImages || []
+  const normalizedImages = images
+    .map(image => image?.imageUrl || image)
+    .filter(Boolean)
+  if (normalizedImages.length) return normalizedImages
+  return detailCar.value?.carImage ? [detailCar.value.carImage] : []
+})
+
+const activeImage = computed(() => carImages.value[activeImageIndex.value] || '')
+const hasMultipleImages = computed(() => carImages.value.length > 1)
 
 const loadTypes = async () => { carTypes.value = await request.get('/car-types') }
+const loadCities = async () => { cities.value = await request.get('/cars/cities') }
+const disableRentDate = (date) => {
+  const current = new Date(date)
+  current.setHours(0, 0, 0, 0)
+  return current < getStartOfToday()
+}
+const disableReturnDate = (date) => {
+  const current = new Date(date)
+  current.setHours(0, 0, 0, 0)
+  const minDate = new Date(`${rentForm.value.rentDate || today}T00:00:00`)
+  return current <= minDate
+}
+const nextDate = (date) => {
+  const nextDay = new Date(`${date}T00:00:00`)
+  nextDay.setDate(nextDay.getDate() + 1)
+  return formatDate(nextDay)
+}
+const initFromQuery = () => {
+  const queryTypeId = route.query.typeId ? Number(route.query.typeId) : ''
+  typeId.value = Number.isNaN(queryTypeId) ? '' : queryTypeId
+  activeType.value = carTypes.value.find(t => t.id === typeId.value)?.typeName || ''
+  city.value = route.query.city || ''
+
+  const pickDate = typeof route.query.pickDate === 'string' ? route.query.pickDate : ''
+  const dropDate = typeof route.query.dropDate === 'string' ? route.query.dropDate : ''
+  rentForm.value.rentDate = pickDate && pickDate >= today ? pickDate : today
+  rentForm.value.expectedReturnDate = dropDate && dropDate > rentForm.value.rentDate ? dropDate : nextDate(rentForm.value.rentDate)
+}
 
 const loadData = async (reset = false) => {
   if (reset) {
@@ -73,6 +134,7 @@ const loadData = async (reset = false) => {
       params: {
         status: 'AVAILABLE',
         typeId: typeId.value || undefined,
+        city: city.value || undefined,
         sort: sort.value || undefined,
         keyword: keyword.value || undefined,
         pageNum: pageNum.value,
@@ -98,7 +160,13 @@ const loadMore = async () => {
 }
 
 // 监听筛选/排序/搜索变化，重新加载
-watch([typeId, sort], () => loadData(true))
+watch([typeId, city, sort], () => loadData(true))
+watch(() => rentForm.value.rentDate, (rentDate) => {
+  if (!rentDate) return
+  if (!rentForm.value.expectedReturnDate || rentForm.value.expectedReturnDate <= rentDate) {
+    rentForm.value.expectedReturnDate = nextDate(rentDate)
+  }
+})
 
 let searchTimer = null
 watch(keyword, () => {
@@ -127,7 +195,8 @@ const handleScroll = () => {
 }
 
 onMounted(async () => {
-  await loadTypes()
+  await Promise.all([loadTypes(), loadCities()])
+  initFromQuery()
   if (isLoggedIn.value) loadFavorites()
   window.addEventListener('scroll', handleScroll, { passive: true })
   // 从订单页/首页/收藏跳转过来，自动选中车辆
@@ -146,7 +215,8 @@ onMounted(async () => {
       await loadData()
       ElMessage.warning('该车辆不存在或已下架')
     }
-    router.replace({ path: '/book' })
+    const { carId: _, ...restQuery } = route.query
+    router.replace({ path: '/book', query: restQuery })
   } else {
     await loadData()
   }
@@ -172,14 +242,29 @@ const selectCar = (car) => {
   showToast(`已选择 ${car.brand} ${car.model}`)
 }
 
-const openDetail = (e, car) => {
+const openDetail = async (e, car) => {
   e.stopPropagation()
-  detailCar.value = car
+  detailCar.value = await request.get(`/cars/${car.id}`)
+  activeImageIndex.value = 0
   detailVisible.value = true
 }
 
 const openImageZoom = () => {
-  if (detailCar.value?.carImage) imageZoomVisible.value = true
+  if (activeImage.value) imageZoomVisible.value = true
+}
+
+const selectImage = (index) => {
+  activeImageIndex.value = index
+}
+
+const prevImage = () => {
+  if (!hasMultipleImages.value) return
+  activeImageIndex.value = (activeImageIndex.value - 1 + carImages.value.length) % carImages.value.length
+}
+
+const nextImage = () => {
+  if (!hasMultipleImages.value) return
+  activeImageIndex.value = (activeImageIndex.value + 1) % carImages.value.length
 }
 
 const days = computed(() => {
@@ -217,16 +302,25 @@ const submitRent = async () => {
     <div class="book-layout">
       <!-- Car list -->
       <div class="book-main">
-        <h2 class="page-title">选择车辆</h2>
+        <div class="book-main-header">
+          <h2 class="page-title">选择车辆</h2>
+          <div class="title-actions">
+            <input class="search-input title-search-input" v-model="keyword" placeholder="搜索品牌、型号…" />
+          </div>
+        </div>
         <div class="filter-bar">
           <div class="filter-chips">
             <div class="filter-chip" :class="{ active: !activeType }" @click="activeType = ''; typeId = ''">全部</div>
             <div v-for="t in carTypes" :key="t.id" class="filter-chip" :class="{ active: activeType === t.typeName }" @click="activeType = t.typeName; typeId = t.id">{{ t.typeName }}</div>
           </div>
           <div class="filter-right">
-            <input class="search-input" v-model="keyword" placeholder="搜索品牌、型号…" />
+            <select class="sort-sel city-sel" v-model="city">
+              <option value="">全部城市</option>
+              <option v-for="item in cities" :key="item" :value="item">{{ item }}</option>
+            </select>
             <select class="sort-sel" v-model="sort">
               <option value="">默认排序</option>
+              <option value="rentCount">租车次数由多到少</option>
               <option value="asc">价格从低到高</option>
               <option value="desc">价格从高到低</option>
             </select>
@@ -239,7 +333,9 @@ const submitRent = async () => {
               <div class="car-img-placeholder"><el-icon size="32" style="color:var(--muted2);"><Van /></el-icon></div>
               <img v-if="car.carImage" :src="car.carImage" :alt="`${car.brand} ${car.model}`" loading="lazy" class="car-img-el" @load="(e) => e.target.classList.add('loaded')" @error="(e) => e.target.style.display='none'" />
               <div class="car-tag">{{ carTypeName(car.typeId) }}</div>
-              <div class="car-fav" :class="{ liked: favoriteIds.has(car.id) }" @click="toggleFavorite($event, car)"><el-icon><Star /></el-icon></div>
+              <div class="car-fav" :class="{ liked: favoriteIds.has(car.id) }" @click="toggleFavorite($event, car)">
+                <el-icon><component :is="favoriteIds.has(car.id) ? StarFilled : Star" /></el-icon>
+              </div>
             </div>
             <div class="car-body">
               <div class="car-name">{{ car.brand }} {{ car.model }}</div>
@@ -247,8 +343,8 @@ const submitRent = async () => {
               <div class="car-features">
                 <div class="car-feat"><el-icon><User /></el-icon> 5座</div>
                 <div class="car-feat"><el-icon><OfficeBuilding /></el-icon> {{ carTypeName(car.typeId) }}</div>
-                <div class="car-feat"><el-icon><Location /></el-icon> {{ car.pickupAddress || '待补充' }}</div>
               </div>
+              <div class="car-location"><el-icon><Location /></el-icon><span>{{ car.pickupAddress || '待补充' }}</span></div>
             </div>
             <div class="car-footer">
               <span class="car-price">¥{{ car.dayPrice }}<small>/天</small></span>
@@ -278,8 +374,8 @@ const submitRent = async () => {
           <div class="summary-field">
             <label>取车 / 还车日期</label>
             <div class="date-row">
-              <el-date-picker v-model="rentForm.rentDate" type="date" value-format="YYYY-MM-DD" format="YYYY/MM/DD" placeholder="取车日期" style="width:100%" :disabled-date="(d) => d < new Date(today)" />
-              <el-date-picker v-model="rentForm.expectedReturnDate" type="date" value-format="YYYY-MM-DD" format="YYYY/MM/DD" placeholder="还车日期" style="width:100%" :disabled-date="(d) => d <= new Date(rentForm.rentDate || today)" />
+              <el-date-picker v-model="rentForm.rentDate" type="date" value-format="YYYY-MM-DD" format="YYYY/MM/DD" placeholder="取车日期" style="width:100%" :disabled-date="disableRentDate" :editable="false" />
+              <el-date-picker v-model="rentForm.expectedReturnDate" type="date" value-format="YYYY-MM-DD" format="YYYY/MM/DD" placeholder="还车日期" style="width:100%" :disabled-date="disableReturnDate" :editable="false" />
             </div>
           </div>
           <div class="summary-field">
@@ -337,10 +433,25 @@ const submitRent = async () => {
           <button class="detail-close" @click="detailVisible = false"><el-icon><Close /></el-icon></button>
         </div>
         <div class="detail-body" v-if="detailCar">
-          <div class="detail-img-wrap" @click="openImageZoom">
-            <img v-if="detailCar.carImage" :src="detailCar.carImage" class="detail-img" @error="(e) => e.target.style.display='none'" />
-            <div v-else class="detail-img-placeholder"><el-icon size="48" style="color:var(--muted2);"><Van /></el-icon></div>
-            <div class="detail-img-zoom-hint"><el-icon><ZoomIn /></el-icon> 点击查看大图</div>
+          <div class="detail-gallery-block">
+            <div class="detail-img-wrap" @click="openImageZoom">
+              <button v-if="hasMultipleImages" class="gallery-arrow gallery-arrow-left" @click.stop="prevImage"><el-icon><ArrowLeft /></el-icon></button>
+              <img v-if="activeImage" :src="activeImage" class="detail-img" @error="(e) => e.target.style.display='none'" />
+              <div v-else class="detail-img-placeholder"><el-icon size="48" style="color:var(--muted2);"><Van /></el-icon></div>
+              <button v-if="hasMultipleImages" class="gallery-arrow gallery-arrow-right" @click.stop="nextImage"><el-icon><ArrowRight /></el-icon></button>
+              <div class="detail-img-zoom-hint"><el-icon><ZoomIn /></el-icon> 点击查看大图</div>
+            </div>
+          </div>
+          <div v-if="carImages.length > 1" class="detail-thumbs">
+            <button
+              v-for="(image, index) in carImages"
+              :key="`${image}-${index}`"
+              class="detail-thumb"
+              :class="{ active: index === activeImageIndex }"
+              @click.stop="selectImage(index)"
+            >
+              <img :src="image" />
+            </button>
           </div>
           <div class="detail-stats">
             <div class="detail-stat"><el-icon size="18" style="color:var(--accent);"><User /></el-icon><span>5座</span></div>
@@ -380,7 +491,25 @@ const submitRent = async () => {
 
     <!-- 图片放大 -->
     <div v-if="imageZoomVisible" class="zoom-overlay" @click="imageZoomVisible = false">
-      <img :src="detailCar?.carImage" class="zoom-img" />
+      <div class="zoom-panel" @click.stop>
+        <div class="zoom-main">
+          <button class="gallery-arrow zoom-arrow zoom-close" @click="imageZoomVisible = false"><el-icon><Close /></el-icon></button>
+          <button v-if="hasMultipleImages" class="gallery-arrow gallery-arrow-left zoom-arrow" @click.stop="prevImage"><el-icon><ArrowLeft /></el-icon></button>
+          <img :src="activeImage" class="zoom-img" />
+          <button v-if="hasMultipleImages" class="gallery-arrow gallery-arrow-right zoom-arrow" @click.stop="nextImage"><el-icon><ArrowRight /></el-icon></button>
+        </div>
+        <div v-if="carImages.length > 1" class="zoom-thumbs">
+          <button
+            v-for="(image, index) in carImages"
+            :key="`zoom-${image}-${index}`"
+            class="detail-thumb zoom-thumb"
+            :class="{ active: index === activeImageIndex }"
+            @click.stop="selectImage(index)"
+          >
+            <img :src="image" />
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -388,7 +517,32 @@ const submitRent = async () => {
 <style scoped>
 .book-page { padding: 32px 40px; max-width: 1200px; margin: 0 auto; }
 .book-layout { display: grid; grid-template-columns: 1fr 360px; gap: 24px; }
-.page-title { font-size: 24px; font-weight: 700; margin-bottom: 20px; }
+.book-main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.page-title { font-size: 24px; font-weight: 700; margin: 0; }
+.title-actions {
+  margin-left: auto;
+}
+.search-input.title-search-input {
+  width: 220px;
+  background: #fff;
+  border: 2px solid #d1d5db;
+  box-sizing: border-box;
+}
+.search-input.title-search-input:hover {
+  border-color: var(--accent);
+}
+.search-input.title-search-input:focus {
+  background: #fff;
+  border-color: var(--accent);
+  box-shadow: none;
+}
 
 .filter-bar {
   display: flex; gap: 10px; align-items: center;
@@ -402,7 +556,7 @@ const submitRent = async () => {
   cursor: pointer; transition: all .15s; color: var(--muted);
 }
 .filter-chip.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); font-weight: 500; }
-.filter-right { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.filter-right { display: flex; gap: 8px; align-items: center; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .search-input {
   padding: 6px 12px; border-radius: 20px; font-size: 13px;
   border: 1px solid var(--border); background: var(--bg);
@@ -414,6 +568,9 @@ const submitRent = async () => {
   padding: 6px 12px; border-radius: 20px; font-size: 13px;
   border: 1px solid var(--border); background: var(--bg);
   color: var(--text); font-family: 'Noto Sans SC', sans-serif; outline: none;
+}
+.city-sel {
+  min-width: 132px;
 }
 
 .car-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
@@ -449,13 +606,36 @@ const submitRent = async () => {
   font-size: 15px; color: var(--muted);
 }
 .car-fav:hover { color: var(--accent); }
-.car-fav.liked { color: var(--accent); }
+.car-fav.liked {
+  color: var(--accent);
+  background: #fff1f0;
+}
+.car-fav.liked :deep(svg) {
+  fill: currentColor;
+}
 .car-body { padding: 16px 18px; }
 .car-name { font-size: 16px; font-weight: 500; }
 .car-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
 .car-features { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .car-feat { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); background: var(--bg); padding: 3px 9px; border-radius: 20px; }
 .car-feat .el-icon { font-size: 12px; }
+.car-location {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.car-location .el-icon {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.car-location span {
+  min-width: 0;
+  word-break: break-all;
+}
 .car-footer { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-top: 1px solid var(--border); }
 .car-price { font-family: 'Bebas Neue', monospace; font-size: 22px; font-weight: 500; color: var(--accent); }
 .car-price small { font-size: 12px; color: var(--muted); }
@@ -574,12 +754,55 @@ const submitRent = async () => {
 .detail-close { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 20px; padding: 4px; transition: color .15s; }
 .detail-close:hover { color: var(--text); }
 .detail-body { padding: 24px; }
+.detail-gallery-block { margin-bottom: 20px; }
 .detail-img-wrap {
   position: relative; border-radius: 12px; overflow: hidden;
-  background: var(--bg); cursor: pointer; margin-bottom: 20px;
+  background: var(--bg); cursor: pointer; margin-bottom: 12px;
 }
 .detail-img { width: 100%; height: 200px; object-fit: cover; display: block; }
 .detail-img-placeholder { height: 200px; display: flex; align-items: center; justify-content: center; }
+.detail-thumbs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.detail-thumb {
+  width: 72px;
+  height: 52px;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--white);
+  cursor: pointer;
+}
+.detail-thumb.active {
+  border-color: var(--accent);
+}
+.detail-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gallery-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.58);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+}
+.gallery-arrow-left { left: 12px; }
+.gallery-arrow-right { right: 12px; }
 .detail-img-zoom-hint {
   position: absolute; bottom: 0; left: 0; right: 0;
   background: rgba(0,0,0,0.5); color: #fff; font-size: 12px;
@@ -662,12 +885,53 @@ const submitRent = async () => {
 /* 图片放大 */
 .zoom-overlay {
   position: fixed; inset: 0; z-index: 300;
-  background: rgba(0,0,0,0.85); display: flex;
+  background: rgba(0,0,0,0.88); display: flex;
   align-items: center; justify-content: center;
-  cursor: zoom-out; animation: fadeIn .2s ease;
+  animation: fadeIn .2s ease;
+}
+.zoom-panel {
+  width: min(92vw, 1120px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.zoom-main {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(92vw, 1120px);
+  height: min(72vh, 760px);
+  padding: 24px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 16px;
+  box-sizing: border-box;
 }
 .zoom-img {
-  max-width: 90vw; max-height: 90vh; object-fit: contain;
-  border-radius: 8px; animation: modalIn .25s ease;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  animation: modalIn .25s ease;
+}
+.zoom-thumbs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.zoom-thumb {
+  background: rgba(255,255,255,0.08);
+}
+.zoom-arrow {
+  background: rgba(255,255,255,0.18);
+  backdrop-filter: blur(8px);
+}
+.zoom-close {
+  top: 12px;
+  right: 12px;
+  left: auto;
+  transform: none;
+  z-index: 2;
 }
 </style>

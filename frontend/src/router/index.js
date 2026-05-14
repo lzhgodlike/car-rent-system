@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { clearAuth, getAuth, isTokenExpired } from '../utils/auth'
+import { clearAuth, getAuth, isTokenExpired, setAuth } from '../utils/auth'
+import request from '../utils/request'
 
 const adminRoutes = [
   { path: '', redirect: '/admin/dashboard' },
@@ -38,16 +39,35 @@ const router = createRouter({
   },
 })
 
-router.beforeEach((to, from, next) => {
+// token 续期防抖
+let refreshPromise = null
+async function refreshToken() {
+  if (refreshPromise) return refreshPromise
+  refreshPromise = request.post('/auth/refresh').then(data => {
+    const auth = getAuth()
+    setAuth({ ...auth, token: data.token, userInfo: data.userInfo })
+  }).catch(() => {}).finally(() => {
+    refreshPromise = null
+  })
+  return refreshPromise
+}
+
+router.beforeEach(async (to, from, next) => {
   const auth = getAuth()
   const token = auth?.token || ''
 
-  // Token 过期 → 清除
+  // Token 过期 → 清除，不续期
   if (token && isTokenExpired(token)) {
     clearAuth()
   }
 
   const currentAuth = getAuth()
+
+  // Token 未过期，切换页面时续期
+  if (currentAuth?.token && !isTokenExpired(currentAuth.token)) {
+    refreshToken()
+  }
+
   const requiresAuth = to.matched.some(r => r.meta.requiresAuth)
   const requiresAdmin = to.matched.some(r => r.meta.role === 'ADMIN')
 
@@ -56,9 +76,9 @@ router.beforeEach((to, from, next) => {
     return next('/home')
   }
 
-  // 需要登录但未登录 → 跳首页
+  // 需要登录但未登录 → 跳首页并打开登录弹窗
   if (requiresAuth && !currentAuth) {
-    return next('/home')
+    return next({ path: '/home', query: { login: 1 } })
   }
 
   // 已登录管理员访问用户页面 → 跳管理后台

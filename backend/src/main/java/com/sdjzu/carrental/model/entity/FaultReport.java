@@ -27,4 +27,7 @@ public class FaultReport {
 
     @TableField(exist = false)
     private CarInfo carInfo;
+
+    @TableField(exist = false)
+    private String reporterName;
 }

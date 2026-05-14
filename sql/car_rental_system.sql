@@ -30,6 +30,9 @@ CREATE TABLE `car_info`  (
   `plate_number` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `day_price` decimal(10, 2) NOT NULL,
   `mileage` int(0) NOT NULL DEFAULT 0,
+  `province` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
+  `city` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
+  `detail_address` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `pickup_address` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `car_image` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'AVAILABLE',
@@ -41,11 +44,35 @@ CREATE TABLE `car_info`  (
 ) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
+-- Table structure for car_image
+-- ----------------------------
+DROP TABLE IF EXISTS `car_image`;
+CREATE TABLE `car_image`  (
+  `id` bigint(0) NOT NULL AUTO_INCREMENT,
+  `car_id` bigint(0) NOT NULL,
+  `image_url` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `sort_order` int(0) NOT NULL DEFAULT 0,
+  `source_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'SERVER',
+  `origin_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
+  `create_time` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0),
+  `update_time` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) ON UPDATE CURRENT_TIMESTAMP(0),
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_car_image_car_id_sort`(`car_id`, `sort_order`, `id`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+
+-- ----------------------------
 -- Records of car_info
 -- ----------------------------
-INSERT INTO `car_info` VALUES (1, 'CAR001', 1, '大众', '朗逸 2024', '鲁A12345', 180.00, 12000, '山东建筑大学长清校区东门', 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', 'AVAILABLE', '2026-03-08 23:12:23', '2026-03-08 23:12:23');
-INSERT INTO `car_info` VALUES (2, 'CAR002', 2, '哈弗', 'H6 2023', '鲁A23456', 260.00, 12, '济南西站停车场', 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80', 'AVAILABLE', '2026-03-08 23:12:23', '2026-03-09 11:49:19');
-INSERT INTO `car_info` VALUES (3, 'CAR003', 3, '比亚迪', '秦PLUS EV', '鲁A34567', 220.00, 18000, '泉城广场地下一层', 'https://images.unsplash.com/photo-1553440569-bcc63803a83d?auto=format&fit=crop&w=800&q=80', 'AVAILABLE', '2026-03-08 23:12:23', '2026-03-09 11:49:14');
+INSERT INTO `car_info` VALUES (1, 'CAR001', 1, '大众', '朗逸 2024', '鲁A12345', 180.00, 12000, '山东省', '济南市', '山东建筑大学长清校区东门', '山东省济南市山东建筑大学长清校区东门', 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', 'AVAILABLE', '2026-03-08 23:12:23', '2026-03-08 23:12:23');
+INSERT INTO `car_info` VALUES (2, 'CAR002', 2, '哈弗', 'H6 2023', '鲁A23456', 260.00, 12, '山东省', '济南市', '济南西站停车场', '山东省济南市济南西站停车场', 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80', 'AVAILABLE', '2026-03-08 23:12:23', '2026-03-09 11:49:19');
+INSERT INTO `car_info` VALUES (3, 'CAR003', 3, '比亚迪', '秦PLUS EV', '鲁A34567', 220.00, 18000, '山东省', '济南市', '泉城广场地下一层', '山东省济南市泉城广场地下一层', 'https://images.unsplash.com/photo-1553440569-bcc63803a83d?auto=format&fit=crop&w=800&q=80', 'AVAILABLE', '2026-03-08 23:12:23', '2026-03-09 11:49:14');
+
+-- ----------------------------
+-- Records of car_image
+-- ----------------------------
+INSERT INTO `car_image` VALUES (1, 1, 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', 0, 'URL_IMPORT', 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', '2026-03-08 23:12:23', '2026-03-08 23:12:23');
+INSERT INTO `car_image` VALUES (2, 2, 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80', 0, 'URL_IMPORT', 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80', '2026-03-08 23:12:23', '2026-03-08 23:12:23');
+INSERT INTO `car_image` VALUES (3, 3, 'https://images.unsplash.com/photo-1553440569-bcc63803a83d?auto=format&fit=crop&w=800&q=80', 0, 'URL_IMPORT', 'https://images.unsplash.com/photo-1553440569-bcc63803a83d?auto=format&fit=crop&w=800&q=80', '2026-03-08 23:12:23', '2026-03-08 23:12:23');
 
 -- ----------------------------
 -- Table structure for car_type

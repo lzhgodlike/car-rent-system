@@ -7,11 +7,13 @@ import com.sdjzu.carrental.common.PageResult;
 import com.sdjzu.carrental.mapper.CarMapper;
 import com.sdjzu.carrental.mapper.RentOrderMapper;
 import com.sdjzu.carrental.mapper.ReturnOrderMapper;
+import com.sdjzu.carrental.mapper.UserMapper;
 import com.sdjzu.carrental.model.dto.CarInfo;
 import com.sdjzu.carrental.model.dto.RentOrderBrief;
 import com.sdjzu.carrental.model.entity.Car;
 import com.sdjzu.carrental.model.entity.RentOrder;
 import com.sdjzu.carrental.model.entity.ReturnOrder;
+import com.sdjzu.carrental.model.entity.User;
 import com.sdjzu.carrental.model.request.ReturnConfirmRequest;
 import com.sdjzu.carrental.model.request.ReturnOrderRequest;
 import com.sdjzu.carrental.security.SecurityUtils;
@@ -33,13 +35,18 @@ public class ReturnOrderService {
     private final RentOrderMapper rentOrderMapper;
     private final CarMapper carMapper;
     private final RentOrderService rentOrderService;
+    private final UserMapper userMapper;
+    private final CarService carService;
 
     public ReturnOrderService(ReturnOrderMapper returnOrderMapper, RentOrderMapper rentOrderMapper,
-                              CarMapper carMapper, RentOrderService rentOrderService) {
+                              CarMapper carMapper, RentOrderService rentOrderService,
+                              UserMapper userMapper, CarService carService) {
         this.returnOrderMapper = returnOrderMapper;
         this.rentOrderMapper = rentOrderMapper;
         this.carMapper = carMapper;
         this.rentOrderService = rentOrderService;
+        this.userMapper = userMapper;
+        this.carService = carService;
     }
 
     @Transactional
@@ -83,12 +90,21 @@ public class ReturnOrderService {
         rentOrderService.recalculateCarStatus(rentOrder.getCarId());
     }
 
-    public PageResult<ReturnOrder> list(int pageNum, int pageSize, String status) {
+    public PageResult<ReturnOrder> list(int pageNum, int pageSize, String status, String keyword) {
         if (SecurityUtils.isAdmin()) {
-            Page<ReturnOrder> page = returnOrderMapper.selectPage(new Page<>(pageNum, pageSize),
-                    new LambdaQueryWrapper<ReturnOrder>()
-                            .eq(StringUtils.hasText(status), ReturnOrder::getStatus, status)
-                            .orderByDesc(ReturnOrder::getId));
+            LambdaQueryWrapper<ReturnOrder> wrapper = new LambdaQueryWrapper<ReturnOrder>()
+                    .eq(StringUtils.hasText(status), ReturnOrder::getStatus, status)
+                    .orderByDesc(ReturnOrder::getId);
+            if (StringUtils.hasText(keyword)) {
+                List<Long> matchedRentOrderIds = findMatchedRentOrderIds(keyword, null);
+                wrapper.and(w -> {
+                    w.like(ReturnOrder::getDamageDesc, keyword);
+                    if (!matchedRentOrderIds.isEmpty()) {
+                        w.or().in(ReturnOrder::getRentOrderId, matchedRentOrderIds);
+                    }
+                });
+            }
+            Page<ReturnOrder> page = returnOrderMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
             PageResult<ReturnOrder> result = PageResult.of(page);
             result.summary("pending", returnOrderMapper.selectCount(
                     new LambdaQueryWrapper<ReturnOrder>().eq(ReturnOrder::getStatus, "PENDING")));
@@ -111,10 +127,22 @@ public class ReturnOrderService {
             result.setPageSize(pageSize);
             return result;
         }
-        Page<ReturnOrder> page = returnOrderMapper.selectPage(new Page<>(pageNum, pageSize),
-                new LambdaQueryWrapper<ReturnOrder>()
-                        .in(ReturnOrder::getRentOrderId, rentIds)
-                        .orderByDesc(ReturnOrder::getId));
+
+        LambdaQueryWrapper<ReturnOrder> wrapper = new LambdaQueryWrapper<ReturnOrder>()
+                .in(ReturnOrder::getRentOrderId, rentIds)
+                .eq(StringUtils.hasText(status), ReturnOrder::getStatus, status)
+                .orderByDesc(ReturnOrder::getId);
+        if (StringUtils.hasText(keyword)) {
+            List<Long> matchedRentOrderIds = findMatchedRentOrderIds(keyword, SecurityUtils.getUserId());
+            wrapper.and(w -> {
+                w.like(ReturnOrder::getDamageDesc, keyword);
+                if (!matchedRentOrderIds.isEmpty()) {
+                    w.or().in(ReturnOrder::getRentOrderId, matchedRentOrderIds);
+                }
+            });
+        }
+
+        Page<ReturnOrder> page = returnOrderMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
         PageResult<ReturnOrder> result = PageResult.of(page);
         result.summary("pending", returnOrderMapper.selectCount(
                 new LambdaQueryWrapper<ReturnOrder>().in(ReturnOrder::getRentOrderId, rentIds).eq(ReturnOrder::getStatus, "PENDING")));
@@ -124,25 +152,70 @@ public class ReturnOrderService {
         return result;
     }
 
+    private List<Long> findMatchedRentOrderIds(String keyword, Long userId) {
+        List<Long> matchedCarIds = carMapper.selectList(new LambdaQueryWrapper<Car>()
+                        .like(Car::getBrand, keyword)
+                        .or().like(Car::getModel, keyword)
+                        .or().like(Car::getPlateNumber, keyword))
+                .stream()
+                .map(Car::getId)
+                .collect(Collectors.toList());
+        List<Long> matchedUserIds = userMapper.selectList(new LambdaQueryWrapper<User>()
+                        .like(User::getUsername, keyword))
+                .stream()
+                .map(User::getId)
+                .collect(Collectors.toList());
+        if (matchedCarIds.isEmpty() && matchedUserIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        LambdaQueryWrapper<RentOrder> wrapper = new LambdaQueryWrapper<RentOrder>()
+                .eq(userId != null, RentOrder::getUserId, userId);
+        wrapper.and(w -> {
+            if (!matchedCarIds.isEmpty()) {
+                w.in(RentOrder::getCarId, matchedCarIds);
+            }
+            if (!matchedCarIds.isEmpty() && !matchedUserIds.isEmpty()) {
+                w.or();
+            }
+            if (!matchedUserIds.isEmpty()) {
+                w.in(RentOrder::getUserId, matchedUserIds);
+            }
+        });
+        return rentOrderMapper.selectList(wrapper).stream()
+                .map(RentOrder::getId)
+                .collect(Collectors.toList());
+    }
+
     private void enrichWithCarInfo(List<ReturnOrder> returns) {
         if (returns == null || returns.isEmpty()) return;
         List<Long> rentOrderIds = returns.stream().map(ReturnOrder::getRentOrderId).distinct().collect(Collectors.toList());
         Map<Long, RentOrder> rentOrderMap = rentOrderMapper.selectBatchIds(rentOrderIds).stream()
                 .collect(Collectors.toMap(RentOrder::getId, r -> r, (a, b) -> a));
         List<Long> carIds = rentOrderMap.values().stream().map(RentOrder::getCarId).distinct().collect(Collectors.toList());
-        Map<Long, Car> carMap = carIds.isEmpty() ? Collections.emptyMap() :
-                carMapper.selectBatchIds(carIds).stream()
-                        .collect(Collectors.toMap(Car::getId, c -> c, (a, b) -> a));
+        List<Car> cars = carIds.isEmpty() ? Collections.emptyList() : carService.enrichCarsForDisplay(carMapper.selectBatchIds(carIds), true);
+        Map<Long, Car> carMap = cars.stream().collect(Collectors.toMap(Car::getId, c -> c, (a, b) -> a));
+        List<Long> userIds = rentOrderMap.values().stream().map(RentOrder::getUserId).distinct().collect(Collectors.toList());
+        Map<Long, User> userMap = userIds.isEmpty() ? Collections.emptyMap() :
+                userMapper.selectBatchIds(userIds).stream()
+                        .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
         for (ReturnOrder ret : returns) {
             RentOrder rentOrder = rentOrderMap.get(ret.getRentOrderId());
             if (rentOrder != null) {
                 RentOrderBrief brief = new RentOrderBrief();
                 BeanUtils.copyProperties(rentOrder, brief);
                 ret.setRentOrderBrief(brief);
+                User user = userMap.get(rentOrder.getUserId());
+                if (user != null) {
+                    ret.setRenterName(user.getUsername());
+                }
                 Car car = carMap.get(rentOrder.getCarId());
                 if (car != null) {
                     CarInfo info = new CarInfo();
                     BeanUtils.copyProperties(car, info);
+                    info.setCarImages(car.getCarImages() == null ? java.util.List.of() : car.getCarImages().stream()
+                            .map(image -> image.getImageUrl())
+                            .collect(Collectors.toList()));
                     ret.setCarInfo(info);
                 }
             }

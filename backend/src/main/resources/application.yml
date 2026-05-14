@@ -9,6 +9,10 @@ spring:
     url: jdbc:mysql://localhost:3306/car_rental_system?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
     username: root
     password: 123456
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 20MB
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
@@ -22,5 +26,10 @@ mybatis-plus:
 
 jwt:
   secret: car-rental-system-secret-key-for-graduation-project-2026
-  expire-minutes: 2
+  expire-minutes: 60
+
+app:
+  media:
+    base-dir: ./uploads
+    access-prefix: /static
 
