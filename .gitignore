@@ -7,7 +7,6 @@ frontend/dist/
 .m2/
 .vscode/
 .claude/
-tmp_auth_snapshot.txt
 *.iml
 .claudeignore
 todo.txt
