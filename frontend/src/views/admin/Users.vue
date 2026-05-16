@@ -12,6 +12,10 @@ const summary = ref({})
 const dialogVisible = ref(false)
 const currentId = ref(null)
 const form = ref({ username: '', realName: '', phone: '', idCard: '', gender: '', role: 'USER', status: 1, password: '' })
+const notifyDialogVisible = ref(false)
+const notifySending = ref(false)
+const notifyTargetName = ref('')
+const notifyForm = ref({ receiverId: null, title: '', content: '' })
 const filterRole = ref('')
 const filterStatus = ref('')
 const keyword = ref('')
@@ -43,8 +47,46 @@ const saveUser = async () => {
   ElMessage.success('已更新'); dialogVisible.value = false; loadData()
 }
 const deleteUser = async (row) => {
-  await ElMessageBox.confirm(`确定删除用户「${row.realName || row.username}」？`, '删除确认', { type: 'warning' })
   await request.delete(`/users/${row.id}`); ElMessage.success('已删除'); loadData()
+}
+const toggleUserStatus = async (row) => {
+  if (row.role !== 'USER') return
+  const nextStatus = Number(row.status) === 1 ? 0 : 1
+  const actionText = nextStatus === 1 ? '启用' : '禁用'
+  await request.put(`/users/${row.id}/status`, { status: nextStatus })
+  ElMessage.success(`已${actionText}`)
+  loadData()
+}
+const openNotify = (row) => {
+  if (row.role !== 'USER') {
+    ElMessage.warning('只能向普通用户发送消息')
+    return
+  }
+  notifyTargetName.value = row.realName || row.username || '用户'
+  notifyForm.value = { receiverId: row.id, title: '', content: '' }
+  notifyDialogVisible.value = true
+}
+const sendCustomNotify = async () => {
+  if (!notifyForm.value.title.trim()) {
+    ElMessage.warning('请输入消息标题')
+    return
+  }
+  if (!notifyForm.value.content.trim()) {
+    ElMessage.warning('请输入消息内容')
+    return
+  }
+  notifySending.value = true
+  try {
+    await request.post('/notifications/admin/custom', {
+      receiverId: notifyForm.value.receiverId,
+      title: notifyForm.value.title.trim(),
+      content: notifyForm.value.content.trim()
+    })
+    ElMessage.success('消息已发送')
+    notifyDialogVisible.value = false
+  } finally {
+    notifySending.value = false
+  }
 }
 </script>
 
@@ -81,9 +123,16 @@ const deleteUser = async (row) => {
         <el-table-column label="状态" width="80">
           <template #default="{row}"><span class="status-badge" :class="Number(row.status) === 1 ? 'status-available' : 'status-disabled'">{{ Number(row.status) === 1 ? '启用' : '停用' }}</span></template>
         </el-table-column>
-        <el-table-column label="操作" width="100">
+        <el-table-column label="操作" width="220">
           <template #default="{row}">
             <div style="display:flex;gap:6px;">
+              <button v-if="row.role === 'USER'" class="btn-sm btn-sm-primary" title="发送消息" @click="openNotify(row)">通知</button>
+              <button
+                v-if="row.role === 'USER'"
+                :class="['btn-sm', 'btn-icon', Number(row.status) === 1 ? 'btn-sm-warning' : 'btn-sm-success']"
+                :title="Number(row.status) === 1 ? '禁用用户' : '启用用户'"
+                @click="toggleUserStatus(row)"
+              ><el-icon><component :is="Number(row.status) === 1 ? 'Lock' : 'Unlock'" /></el-icon></button>
               <button class="btn-sm btn-sm-ghost btn-icon" title="编辑" @click="openEdit(row)"><el-icon><Edit /></el-icon></button>
               <button class="btn-sm btn-sm-danger btn-icon" title="删除" @click="deleteUser(row)"><el-icon><Delete /></el-icon></button>
             </div>
@@ -109,6 +158,33 @@ const deleteUser = async (row) => {
       <template #footer>
         <button class="btn-sm btn-sm-ghost" @click="dialogVisible = false">取消</button>
         <button class="btn-sm btn-sm-primary" @click="saveUser">保存</button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="notifyDialogVisible" title="发送自定义消息" width="520px">
+      <el-form :model="notifyForm" label-width="90px">
+        <el-form-item label="接收用户">
+          <el-input :model-value="notifyTargetName" disabled />
+        </el-form-item>
+        <el-form-item label="消息标题">
+          <el-input v-model="notifyForm.title" maxlength="40" show-word-limit placeholder="请输入标题" />
+        </el-form-item>
+        <el-form-item label="消息内容">
+          <el-input
+            v-model="notifyForm.content"
+            type="textarea"
+            :rows="4"
+            maxlength="300"
+            show-word-limit
+            placeholder="请输入发送给用户的消息内容"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <button class="btn-sm btn-sm-ghost" @click="notifyDialogVisible = false">取消</button>
+        <button class="btn-sm btn-sm-primary" :disabled="notifySending" @click="sendCustomNotify">
+          {{ notifySending ? '发送中...' : '发送消息' }}
+        </button>
       </template>
     </el-dialog>
   </div>
