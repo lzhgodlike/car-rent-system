@@ -1,11 +1,12 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import request from '../../utils/request'
 import { getAuth, setAuth, clearAuth } from '../../utils/auth'
 
 const router = useRouter()
+const route = useRoute()
 const auth = getAuth()
 const userName = computed(() => auth?.userInfo?.realName || auth?.userInfo?.username || '用户')
 const formRef = ref(null)
@@ -15,6 +16,7 @@ const pwdForm = ref({ oldPassword: '', password: '', confirmPassword: '' })
 const editing = ref(false)
 const changingPwd = ref(false)
 const favorites = ref([])
+const notificationEnabled = ref(true)
 
 const maskPhone = (v) => {
   if (!v || v.length < 7) return v || '-'
@@ -43,6 +45,29 @@ const rules = {
   gender: [{ required: true, message: '请选择性别', trigger: 'change' }],
 }
 
+const hasFieldValue = (v) => {
+  if (typeof v === 'string') return v.trim().length > 0
+  return Boolean(v)
+}
+const isVerified = computed(() => {
+  return hasFieldValue(form.value.realName) && hasFieldValue(form.value.phone) && hasFieldValue(form.value.idCard)
+})
+const shouldOpenEdit = (value) => {
+  if (Array.isArray(value)) return value.some(v => v === '1' || v === 'true')
+  return value === '1' || value === 'true'
+}
+const clearOpenEditQuery = () => {
+  if (!Object.prototype.hasOwnProperty.call(route.query, 'openEdit')) return
+  const nextQuery = { ...route.query }
+  delete nextQuery.openEdit
+  router.replace({ path: route.path, query: nextQuery })
+}
+const openEditFromQuery = () => {
+  if (!shouldOpenEdit(route.query.openEdit)) return
+  startEdit()
+  clearOpenEditQuery()
+}
+
 const loadData = async () => {
   const data = await request.get('/users/profile')
   Object.assign(form.value, data)
@@ -50,14 +75,16 @@ const loadData = async () => {
   try {
     favorites.value = await request.get('/favorites')
   } catch {}
+  openEditFromQuery()
 }
 onMounted(loadData)
 
 const save = async () => {
-  if (!form.value.realName) { ElMessage.warning('请输入姓名'); return }
-  if (!/^1[3-9]\d{9}$/.test(form.value.phone || '')) { ElMessage.warning('请输入正确的手机号'); return }
-  if (!/^\d{17}[\dXx]$/.test(form.value.idCard || '')) { ElMessage.warning('请输入正确的身份证号'); return }
-  if (!form.value.gender) { ElMessage.warning('请选择性别'); return }
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) {
+    ElMessage.warning('请先完善必填信息')
+    return
+  }
   try {
     await request.put('/users/profile', { ...form.value, password: '' })
     const latest = await request.get('/auth/me')
@@ -87,6 +114,7 @@ const removeFavorite = async (carId) => {
 }
 
 const startEdit = () => {
+  if (editing.value) return
   formSnapshot.value = { ...form.value }
   editing.value = true
 }
@@ -96,6 +124,7 @@ const cancelEdit = () => {
 }
 
 const logout = () => { clearAuth(); router.replace('/home') }
+const toggleNotification = () => { notificationEnabled.value = !notificationEnabled.value }
 </script>
 
 <template>
@@ -117,36 +146,24 @@ const logout = () => { clearAuth(); router.replace('/home') }
 
     <div class="profile-grid">
       <!-- 基本信息 -->
-      <div class="pcard pcard-fixed">
+      <div class="pcard pcard-fixed basic-info-card">
         <div class="pcard-title"><el-icon><User /></el-icon> 基本信息</div>
-        <template v-if="!editing">
+        <div class="basic-info-content">
           <div class="info-row"><span class="label">姓名</span><span class="val">{{ form.realName || '-' }}</span></div>
           <div class="info-row"><span class="label">手机号</span><span class="val">{{ maskPhone(form.phone) }}</span></div>
           <div class="info-row"><span class="label">证件号</span><span class="val">{{ maskIdCard(form.idCard) }}</span></div>
           <div class="info-row"><span class="label">性别</span><span class="val">{{ form.gender || '-' }}</span></div>
-          <div class="btn-row">
-            <button class="btn-sm btn-sm-outline" @click="startEdit"><el-icon><Edit /></el-icon> 编辑信息</button>
-            <button class="btn-sm btn-sm-outline" @click="changingPwd = true"><el-icon><Lock /></el-icon> 修改密码</button>
-          </div>
-        </template>
-        <el-form v-else ref="formRef" :model="form" :rules="rules" label-width="70px">
-          <el-form-item label="姓名" prop="realName"><el-input v-model="form.realName" /></el-form-item>
-          <el-form-item label="手机号" prop="phone"><el-input v-model="form.phone" /></el-form-item>
-          <el-form-item label="证件号" prop="idCard"><el-input v-model="form.idCard" /></el-form-item>
-          <el-form-item label="性别" prop="gender">
-            <el-select v-model="form.gender" style="width:100%"><el-option label="男" value="男" /><el-option label="女" value="女" /></el-select>
-          </el-form-item>
-          <el-form-item>
-            <button type="button" class="btn-sm btn-sm-primary" @click="save">保存修改</button>
-            <button type="button" class="btn-sm btn-sm-outline" style="margin-left:8px;" @click="cancelEdit">取消</button>
-          </el-form-item>
-        </el-form>
+        </div>
+        <div class="btn-row basic-info-actions">
+          <button class="btn-sm btn-sm-outline" @click="startEdit"><el-icon><Edit /></el-icon> 编辑信息</button>
+          <button class="btn-sm btn-sm-outline" @click="changingPwd = true"><el-icon><Lock /></el-icon> 修改密码</button>
+        </div>
       </div>
 
       <!-- 我的收藏 -->
       <div class="pcard">
         <div class="pcard-title"><el-icon><Star /></el-icon> 我的收藏</div>
-        <template v-if="favorites.length > 0">
+        <div v-if="favorites.length > 0" class="favorites-scroll">
           <div v-for="car in favorites" :key="car.id" class="info-row">
             <span>{{ car.brand }} {{ car.model }}</span>
             <div style="display:flex;align-items:center;gap:8px;">
@@ -159,20 +176,66 @@ const logout = () => { clearAuth(); router.replace('/home') }
               <el-icon class="fav-remove" @click="removeFavorite(car.id)"><Close /></el-icon>
             </div>
           </div>
-        </template>
+        </div>
         <div v-else class="empty-hint">暂无收藏</div>
       </div>
 
       <!-- 账户设置 -->
       <div class="pcard">
         <div class="pcard-title"><el-icon><Setting /></el-icon> 账户设置</div>
-        <div class="info-row"><span class="label">用户名</span><span class="val">{{ auth?.userInfo?.username }}</span></div>
-        <div class="info-row"><span class="label">角色</span><span class="val">{{ auth?.userInfo?.role === 'ADMIN' ? '管理员' : '普通用户' }}</span></div>
-        <div class="info-row"><span class="label">消息通知</span><span class="val" style="color:var(--success);">已开启</span></div>
-        <div class="info-row"><span class="label">实名认证</span><span class="val" style="color:var(--success);">已认证</span></div>
+        <div class="info-row account-row"><span class="label">用户名</span><span class="val">{{ auth?.userInfo?.username }}</span></div>
+        <div class="info-row account-row"><span class="label">角色</span><span class="val">{{ auth?.userInfo?.role === 'ADMIN' ? '管理员' : '普通用户' }}</span></div>
+        <div class="info-row">
+          <span class="label">消息通知</span>
+          <button
+            type="button"
+            class="notify-action"
+            :class="notificationEnabled ? 'is-on' : 'is-off'"
+            @click="toggleNotification"
+          >
+            <span class="notify-action-default">{{ notificationEnabled ? '已开启' : '已关闭' }}</span>
+            <span class="notify-action-hover">{{ notificationEnabled ? '关闭' : '开启' }}</span>
+          </button>
+        </div>
+        <div class="info-row verify-row">
+          <span class="label">实名认证</span>
+          <div class="verify-status-wrap">
+            <span v-if="isVerified" class="val verify-pass">已认证</span>
+            <button v-else class="verify-action" @click="startEdit">
+              <span class="verify-action-default">未认证</span>
+              <span class="verify-action-hover">去认证</span>
+            </button>
+          </div>
+        </div>
         <button class="btn-sm btn-sm-danger" style="margin-top:14px;width:100%;" @click="logout">
           <el-icon><SwitchButton /></el-icon> 退出登录
         </button>
+      </div>
+    </div>
+
+    <!-- 编辑基本信息弹窗 -->
+    <div v-if="editing" class="detail-overlay" @click.self="cancelEdit">
+      <div class="detail-modal detail-modal-wide">
+        <div class="detail-header">
+          <div class="detail-title">编辑基本信息</div>
+          <button class="detail-close" @click="cancelEdit"><el-icon><Close /></el-icon></button>
+        </div>
+        <div class="detail-body">
+          <el-form ref="formRef" :model="form" :rules="rules" label-width="70px">
+            <el-form-item label="姓名" prop="realName"><el-input v-model="form.realName" placeholder="请输入真实姓名" /></el-form-item>
+            <el-form-item label="手机号" prop="phone"><el-input v-model="form.phone" placeholder="请输入11位手机号" /></el-form-item>
+            <el-form-item label="证件号" prop="idCard"><el-input v-model="form.idCard" placeholder="请输入18位身份证号" /></el-form-item>
+            <el-form-item label="性别" prop="gender">
+              <el-select v-model="form.gender" style="width:100%"><el-option label="男" value="男" /><el-option label="女" value="女" /></el-select>
+            </el-form-item>
+            <el-form-item style="margin-bottom:0;">
+              <div class="form-actions">
+                <button type="button" class="btn-sm btn-sm-outline" @click="cancelEdit">取消</button>
+                <button type="button" class="btn-sm btn-sm-primary" @click="save">保存修改</button>
+              </div>
+            </el-form-item>
+          </el-form>
+        </div>
       </div>
     </div>
 
@@ -248,15 +311,140 @@ const logout = () => { clearAuth(); router.replace('/home') }
 .pcard-fixed { min-height: 240px; }
 .pcard-title { font-size: 14px; font-weight: 500; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
 .pcard-title .el-icon { color: var(--accent); }
+.basic-info-card { display: flex; flex-direction: column; }
+.basic-info-content { display: flex; flex-direction: column; height: 280px; }
+.btn-row.basic-info-actions { margin-top: auto; padding-top: 14px; }
 
 /* Info rows */
 .info-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .info-row:last-child { border-bottom: none; }
 .info-row .label { color: var(--muted); font-size: 13px; }
 .info-row .val { font-weight: 500; }
+.account-row .val { margin-right: 11px; }
 .empty-hint { text-align: center; padding: 24px; color: var(--muted); font-size: 13px; }
+.verify-status-wrap { display: flex; align-items: center; gap: 8px; min-height: 24px; }
+.verify-pass {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  line-height: 24px;
+  color: var(--success);
+  margin-right: 11px;
+}
+.notify-action {
+  position: relative;
+  width: 64px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+  line-height: 24px;
+}
+.notify-action-default,
+.notify-action-hover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.notify-action.is-on .notify-action-default { color: var(--success); }
+.notify-action.is-off .notify-action-default { color: var(--accent); }
+.notify-action-hover {
+  border: 1px solid;
+  border-radius: 999px;
+  box-sizing: border-box;
+  opacity: 0;
+  transform: scale(.97);
+}
+.notify-action.is-on .notify-action-hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(200,56,42,0.06);
+}
+.notify-action.is-off .notify-action-hover {
+  color: var(--success);
+  border-color: var(--success);
+  background: rgba(62, 157, 111, 0.08);
+}
+.notify-action:hover .notify-action-default {
+  opacity: 0;
+  transform: scale(.97);
+}
+.notify-action:hover .notify-action-hover {
+  opacity: 1;
+  transform: scale(1);
+}
+.verify-action {
+  position: relative;
+  width: 64px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+  line-height: 24px;
+}
+.verify-action-default {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.verify-action-hover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent);
+  background: rgba(200,56,42,0.06);
+  white-space: nowrap;
+  box-sizing: border-box;
+  opacity: 0;
+  transform: scale(.97);
+  transition: opacity .15s ease, transform .15s ease;
+}
+.verify-action:hover .verify-action-default {
+  opacity: 0;
+  transform: scale(.97);
+}
+.verify-action:hover .verify-action-hover {
+  opacity: 1;
+  transform: scale(1);
+}
+:deep(.el-form-item.is-error .el-input__wrapper),
+:deep(.el-form-item.is-error .el-select__wrapper) {
+  box-shadow: 0 0 0 1px var(--el-color-danger) inset !important;
+}
 
 /* Favorites */
+.favorites-scroll {
+  height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
+}
 .fav-price { color: var(--accent); font-family: var(--font-mono); font-weight: 500; }
 .fav-remove { cursor: pointer; color: var(--muted); transition: color .15s; }
 .fav-remove:hover { color: var(--accent); }
@@ -291,6 +479,7 @@ const logout = () => { clearAuth(); router.replace('/home') }
   background: var(--white); border-radius: 20px;
   width: 400px; box-shadow: var(--shadow-lg); animation: modalIn .25s ease;
 }
+.detail-modal-wide { width: 460px; max-width: calc(100vw - 32px); }
 @keyframes modalIn { from { opacity: 0; transform: translateY(12px) scale(.97); } to { opacity: 1; transform: none; } }
 .detail-header {
   padding: 20px 24px; border-bottom: 1px solid var(--border);
@@ -309,4 +498,5 @@ const logout = () => { clearAuth(); router.replace('/home') }
 }
 .return-field input:focus { border-color: var(--accent); }
 .return-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.form-actions { width: 100%; display: flex; justify-content: flex-end; gap: 8px; }
 </style>

@@ -272,6 +272,12 @@ const days = computed(() => {
   return Math.max(1, Math.ceil((new Date(rentForm.value.expectedReturnDate) - new Date(rentForm.value.rentDate)) / 86400000))
 })
 const totalPrice = computed(() => selectedCar.value ? selectedCar.value.dayPrice * days.value : 0)
+const isFilled = (value) => String(value ?? '').trim().length > 0
+const isProfileVerified = (profile) => isFilled(profile?.realName) && isFilled(profile?.phone) && isFilled(profile?.idCard)
+const goToProfileVerification = () => {
+  profileTipVisible.value = false
+  router.push({ path: '/my-profile', query: { openEdit: '1' } })
+}
 
 const submitRent = async () => {
   if (!selectedCar.value) { ElMessage.warning('请先选择车辆'); return }
@@ -285,7 +291,7 @@ const submitRent = async () => {
 
   try {
     const profile = await request.get('/users/profile')
-    if (!profile.realName || !profile.phone || !profile.idCard) {
+    if (!isProfileVerified(profile)) {
       profileTipVisible.value = true
       return
     }
@@ -418,7 +424,7 @@ const submitRent = async () => {
             租车前需要完善<strong style="color:var(--text);">姓名、手机号和身份证号</strong>信息。<br>
             请前往个人中心完成填写后再试。
           </p>
-          <button class="tip-btn" style="margin-top:20px;" @click="profileTipVisible = false; router.push('/my-profile')">
+          <button class="tip-btn" style="margin-top:20px;" @click="goToProfileVerification">
             去完善信息
           </button>
         </div>

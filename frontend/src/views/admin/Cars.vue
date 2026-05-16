@@ -206,7 +206,8 @@ const onUploadFile = async (event) => {
   uploadLoading.value = true
   try {
     const result = await request.post('/admin/media/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: { carNo: form.value.carNo || '' }
     })
     form.value.images.push({ id: null, imageUrl: result.url, sortOrder: form.value.images.length })
     ElMessage.success('图片上传成功')
@@ -222,7 +223,10 @@ const importImageByUrl = async () => {
   }
   importLoading.value = true
   try {
-    const result = await request.post('/admin/media/import-by-url', { url: imageUrlInput.value.trim() })
+    const result = await request.post('/admin/media/import-by-url', {
+      url: imageUrlInput.value.trim(),
+      carNo: form.value.carNo || '',
+    })
     form.value.images.push({ id: null, imageUrl: result.url, sortOrder: form.value.images.length })
     imageUrlInput.value = ''
     ElMessage.success('图片导入成功')
@@ -239,7 +243,12 @@ const moveImage = (index, direction) => {
   form.value.images = list.map((item, idx) => ({ ...item, sortOrder: idx }))
 }
 
-const removeImage = (index) => {
+const removeImage = async (index) => {
+  const target = form.value.images[index]
+  if (!target) return
+  if (!target.id) {
+    await request.delete('/admin/media', { params: { url: target.imageUrl } })
+  }
   form.value.images.splice(index, 1)
   form.value.images = form.value.images.map((item, idx) => ({ ...item, sortOrder: idx }))
 }

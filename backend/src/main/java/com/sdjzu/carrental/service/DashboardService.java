@@ -58,7 +58,9 @@ public class DashboardService {
         data.put("rentOrderCount", rentOrderMapper.selectCount(null));
         data.put("returnOrderCount", returnOrderMapper.selectCount(null));
         data.put("faultReportCount", faultReportMapper.selectCount(null));
-        data.put("pendingFaultCount", faultReportMapper.selectCount(new LambdaQueryWrapper<FaultReport>().eq(FaultReport::getFaultStatus, "PENDING")));
+        data.put("pendingFaultCount", faultReportMapper.selectCount(
+                new LambdaQueryWrapper<FaultReport>().in(FaultReport::getFaultStatus, "PENDING", "REPAIRING")
+        ));
         data.put("pendingPickupCount", rentOrderMapper.selectCount(new LambdaQueryWrapper<RentOrder>().eq(RentOrder::getOrderStatus, "PENDING_PICKUP")));
         data.put("pendingReturnCount", rentOrderMapper.selectCount(new LambdaQueryWrapper<RentOrder>().eq(RentOrder::getOrderStatus, "RETURN_PENDING")));
         data.put("activeRentCount", rentOrderMapper.selectCount(new LambdaQueryWrapper<RentOrder>().in(RentOrder::getOrderStatus, "PENDING_PICKUP", "RENTED", "RETURN_PENDING")));

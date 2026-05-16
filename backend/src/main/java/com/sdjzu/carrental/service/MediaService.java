@@ -20,12 +20,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 @Service
 public class MediaService {
@@ -45,7 +44,7 @@ public class MediaService {
     @Value("${app.media.access-prefix:/static}")
     private String mediaAccessPrefix;
 
-    public MediaFileVO uploadCarImage(MultipartFile file) {
+    public MediaFileVO uploadCarImage(MultipartFile file, String carNo) {
         SecurityUtils.requireAdmin();
         if (file == null || file.isEmpty()) {
             throw new BusinessException("请上传图片文件");
@@ -55,7 +54,7 @@ public class MediaService {
         validateExtension(extension);
         String contentType = file.getContentType();
         validateContentType(contentType);
-        String relativePath = buildRelativePath(extension);
+        String relativePath = buildRelativePath(extension, carNo);
         Path target = resolveTargetPath(relativePath);
         try {
             Files.createDirectories(target.getParent());
@@ -66,7 +65,7 @@ public class MediaService {
         return new MediaFileVO(buildAccessUrl(relativePath), target.getFileName().toString(), file.getSize());
     }
 
-    public MediaFileVO importCarImage(String url) {
+    public MediaFileVO importCarImage(String url, String carNo) {
         SecurityUtils.requireAdmin();
         if (!StringUtils.hasText(url) || !(url.startsWith("http://") || url.startsWith("https://"))) {
             throw new BusinessException("图片链接必须以 http 或 https 开头");
@@ -89,7 +88,7 @@ public class MediaService {
                 validateFileSize(contentLength);
             }
             String extension = extensionFromContentType(normalizedContentType);
-            String relativePath = buildRelativePath(extension);
+            String relativePath = buildRelativePath(extension, carNo);
             Path target = resolveTargetPath(relativePath);
             Files.createDirectories(target.getParent());
             try (InputStream body = response.body()) {
@@ -104,25 +103,140 @@ public class MediaService {
         }
     }
 
+    public void deleteCarImage(String imageUrl) {
+        SecurityUtils.requireAdmin();
+        deleteCarImageIfManaged(imageUrl);
+    }
+
+    public void deleteCarImageFolder(String carNo) {
+        if (!StringUtils.hasText(carNo)) {
+            return;
+        }
+        String folderRelativePath = Paths.get("car-images", normalizeCarFolder(carNo)).toString().replace('\\', '/');
+        Path folder = resolveTargetPath(folderRelativePath);
+        if (!Files.exists(folder)) {
+            return;
+        }
+        try (Stream<Path> pathStream = Files.walk(folder)) {
+            for (Path path : pathStream.sorted((a, b) -> b.compareTo(a)).toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (Exception e) {
+            throw new BusinessException("删除车辆图片目录失败");
+        }
+    }
+
+    public String moveCarImageToCarFolder(String imageUrl, String carNo) {
+        if (!StringUtils.hasText(imageUrl) || !StringUtils.hasText(carNo)) {
+            return imageUrl;
+        }
+        String relativePath = extractRelativePath(imageUrl);
+        if (!StringUtils.hasText(relativePath)) {
+            return imageUrl;
+        }
+        String targetDirectory = "car-images/" + normalizeCarFolder(carNo) + "/";
+        if (relativePath.startsWith(targetDirectory)) {
+            return buildAccessUrl(relativePath);
+        }
+        Path source = resolveTargetPath(relativePath);
+        if (!Files.exists(source)) {
+            return imageUrl;
+        }
+        String targetRelativePath = targetDirectory + source.getFileName();
+        Path target = resolveTargetPath(targetRelativePath);
+        try {
+            Files.createDirectories(target.getParent());
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            return buildAccessUrl(targetRelativePath);
+        } catch (Exception e) {
+            throw new BusinessException("图片移动失败");
+        }
+    }
+
+    public void deleteCarImageIfManaged(String imageUrl) {
+        if (!StringUtils.hasText(imageUrl)) {
+            return;
+        }
+        String relativePath = extractRelativePath(imageUrl);
+        if (!StringUtils.hasText(relativePath)) {
+            return;
+        }
+        Path target = resolveTargetPath(relativePath);
+        try {
+            Files.deleteIfExists(target);
+        } catch (Exception e) {
+            throw new BusinessException("删除图片文件失败");
+        }
+    }
+
     public Path getMediaBasePath() {
         return Paths.get(mediaBaseDir).toAbsolutePath().normalize();
     }
 
     public String getMediaAccessPrefix() {
-        return mediaAccessPrefix;
+        return normalizedAccessPrefix();
     }
 
     private Path resolveTargetPath(String relativePath) {
-        return getMediaBasePath().resolve(relativePath).normalize();
+        Path basePath = getMediaBasePath();
+        Path targetPath = basePath.resolve(relativePath).normalize();
+        if (!targetPath.startsWith(basePath)) {
+            throw new BusinessException("非法媒体路径");
+        }
+        return targetPath;
     }
 
-    private String buildRelativePath(String extension) {
-        String month = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMM"));
-        return Paths.get("car-images", month, UUID.randomUUID() + "." + extension).toString().replace('\\', '/');
+    private String buildRelativePath(String extension, String carNo) {
+        return Paths.get("car-images", normalizeCarFolder(carNo), UUID.randomUUID() + "." + extension)
+                .toString()
+                .replace('\\', '/');
     }
 
     private String buildAccessUrl(String relativePath) {
-        return mediaAccessPrefix + "/" + relativePath;
+        return normalizedAccessPrefix() + "/" + relativePath;
+    }
+
+    private String normalizedAccessPrefix() {
+        String prefix = StringUtils.hasText(mediaAccessPrefix) ? mediaAccessPrefix.trim() : "/static";
+        if (!prefix.startsWith("/")) {
+            prefix = "/" + prefix;
+        }
+        if (prefix.endsWith("/")) {
+            prefix = prefix.substring(0, prefix.length() - 1);
+        }
+        return prefix;
+    }
+
+    private String extractRelativePath(String imageUrl) {
+        String path = imageUrl.trim();
+        if (path.startsWith("http://") || path.startsWith("https://")) {
+            try {
+                path = URI.create(path).getPath();
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        if (!StringUtils.hasText(path)) {
+            return null;
+        }
+        int queryIndex = path.indexOf('?');
+        if (queryIndex >= 0) {
+            path = path.substring(0, queryIndex);
+        }
+        String accessPrefix = normalizedAccessPrefix();
+        String prefixWithSlash = accessPrefix + "/";
+        if (!path.startsWith(prefixWithSlash)) {
+            return null;
+        }
+        return path.substring(prefixWithSlash.length());
+    }
+
+    private String normalizeCarFolder(String carNo) {
+        if (!StringUtils.hasText(carNo)) {
+            return "_temp";
+        }
+        String folder = carNo.trim().replaceAll("[^0-9A-Za-z_-]", "_");
+        return folder.isEmpty() ? "_temp" : folder;
     }
 
     private void validateFileSize(long size) {

@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,10 +28,12 @@ public class CarService {
 
     private final CarMapper carMapper;
     private final CarImageMapper carImageMapper;
+    private final MediaService mediaService;
 
-    public CarService(CarMapper carMapper, CarImageMapper carImageMapper) {
+    public CarService(CarMapper carMapper, CarImageMapper carImageMapper, MediaService mediaService) {
         this.carMapper = carMapper;
         this.carImageMapper = carImageMapper;
+        this.mediaService = mediaService;
     }
 
     public List<String> listBrands() {
@@ -135,7 +138,7 @@ public class CarService {
         carMapper.insert(car);
         car.setCarNo(generateCarNo(car.getId()));
         carMapper.updateById(car);
-        saveCarImages(car.getId(), request.getImages());
+        saveCarImages(car.getId(), car.getCarNo(), request.getImages());
     }
 
     @Transactional
@@ -153,9 +156,10 @@ public class CarService {
         car.setCarImage(existing.getCarImage());
         car.setStatus(existing.getStatus());
         carMapper.updateById(car);
-        saveCarImages(id, request.getImages());
+        saveCarImages(id, existing.getCarNo(), request.getImages());
     }
 
+    @Transactional
     public void delete(Long id) {
         SecurityUtils.requireAdmin();
         Car car = carMapper.selectById(id);
@@ -165,8 +169,17 @@ public class CarService {
         if (!"AVAILABLE".equals(car.getStatus()) && !"DISABLED".equals(car.getStatus())) {
             throw new BusinessException("只能删除空闲或停用状态的车辆，当前状态: " + car.getStatus());
         }
+        List<CarImage> existingImages = carImageMapper.selectList(new LambdaQueryWrapper<CarImage>().eq(CarImage::getCarId, id));
         carImageMapper.delete(new LambdaQueryWrapper<CarImage>().eq(CarImage::getCarId, id));
         carMapper.deleteById(id);
+        deleteOrphanManagedImages(
+                existingImages.stream()
+                        .map(CarImage::getImageUrl)
+                        .filter(StringUtils::hasText)
+                        .collect(Collectors.toSet()),
+                id
+        );
+        mediaService.deleteCarImageFolder(car.getCarNo());
     }
 
     public void disable(Long id) {
@@ -219,24 +232,55 @@ public class CarService {
         }
     }
 
-    private void saveCarImages(Long carId, List<CarImageItemRequest> images) {
-        List<CarImageItemRequest> sortedImages = images.stream()
+    private void saveCarImages(Long carId, String carNo, List<CarImageItemRequest> images) {
+        List<CarImage> existingImages = carImageMapper.selectList(new LambdaQueryWrapper<CarImage>().eq(CarImage::getCarId, carId));
+        List<CarImageItemRequest> sourceImages = images == null ? List.of() : images;
+        List<CarImageItemRequest> sortedImages = sourceImages.stream()
                 .sorted(Comparator.comparing(CarImageItemRequest::getSortOrder))
                 .toList();
+        List<String> normalizedUrls = sortedImages.stream()
+                .map(item -> mediaService.moveCarImageToCarFolder(item.getImageUrl(), carNo))
+                .toList();
+        Set<String> retainedUrls = normalizedUrls.stream()
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        Set<String> removedUrls = existingImages.stream()
+                .map(CarImage::getImageUrl)
+                .filter(StringUtils::hasText)
+                .filter(url -> !retainedUrls.contains(url))
+                .collect(Collectors.toSet());
         carImageMapper.delete(new LambdaQueryWrapper<CarImage>().eq(CarImage::getCarId, carId));
-        for (CarImageItemRequest item : sortedImages) {
+        String mediaPrefix = mediaService.getMediaAccessPrefix() + "/";
+        for (int i = 0; i < sortedImages.size(); i++) {
+            CarImageItemRequest item = sortedImages.get(i);
+            String normalizedUrl = normalizedUrls.get(i);
             CarImage image = new CarImage();
             image.setCarId(carId);
-            image.setImageUrl(item.getImageUrl());
+            image.setImageUrl(normalizedUrl);
             image.setSortOrder(item.getSortOrder());
-            image.setSourceType(item.getImageUrl().startsWith("/static/") ? "SERVER" : "URL_IMPORT");
+            image.setSourceType(StringUtils.hasText(normalizedUrl) && normalizedUrl.startsWith(mediaPrefix) ? "SERVER" : "URL_IMPORT");
             image.setOriginUrl(item.getImageUrl());
             carImageMapper.insert(image);
         }
         Car update = new Car();
         update.setId(carId);
-        update.setCarImage(sortedImages.isEmpty() ? null : sortedImages.get(0).getImageUrl());
+        update.setCarImage(normalizedUrls.isEmpty() ? null : normalizedUrls.get(0));
         carMapper.updateById(update);
+        deleteOrphanManagedImages(removedUrls, carId);
+    }
+
+    private void deleteOrphanManagedImages(Set<String> imageUrls, Long currentCarId) {
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            return;
+        }
+        for (String imageUrl : imageUrls) {
+            long referencedCount = carImageMapper.selectCount(new LambdaQueryWrapper<CarImage>()
+                    .eq(CarImage::getImageUrl, imageUrl)
+                    .ne(currentCarId != null, CarImage::getCarId, currentCarId));
+            if (referencedCount == 0) {
+                mediaService.deleteCarImageIfManaged(imageUrl);
+            }
+        }
     }
 
     private String buildPickupAddress(String province, String city, String detailAddress) {
