@@ -326,7 +326,7 @@ const submitRent = async () => {
             </select>
             <select class="sort-sel" v-model="sort">
               <option value="">默认排序</option>
-              <option value="rentCount">租车次数由多到少</option>
+              <option value="rentCount">近期热租</option>
               <option value="asc">价格从低到高</option>
               <option value="desc">价格从高到低</option>
             </select>
