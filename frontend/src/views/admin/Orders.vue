@@ -19,6 +19,7 @@ const detailOrder = ref(null)
 // 取车处理弹窗
 const pickupDialogVisible = ref(false)
 const pickupOrder = ref(null)
+const remindingId = ref(null)
 
 const statusMap = { PENDING_PICKUP: '待取车', RENTED: '租赁中', RETURN_PENDING: '待确认还车', COMPLETED: '已完成', CANCELLED: '已取消' }
 const statusClass = { PENDING_PICKUP: 'status-pending', RENTED: 'status-rented', RETURN_PENDING: 'status-return-pending', COMPLETED: 'status-completed', CANCELLED: 'status-cancelled' }
@@ -65,6 +66,17 @@ const rejectPickup = async () => {
     loadData()
   } catch {}
 }
+
+const remindReturn = async (row) => {
+  if (remindingId.value) return
+  remindingId.value = row.id
+  try {
+    await request.put(`/rent-orders/${row.id}/remind-return`)
+    ElMessage.success('提醒已发送')
+  } finally {
+    remindingId.value = null
+  }
+}
 </script>
 
 <template>
@@ -104,9 +116,15 @@ const rejectPickup = async () => {
         <el-table-column label="状态" width="120">
           <template #default="{row}"><span class="status-badge" :class="statusClass[row.orderStatus]">{{ statusMap[row.orderStatus] || row.orderStatus }}</span></template>
         </el-table-column>
-        <el-table-column label="操作" width="180">
+        <el-table-column label="操作" width="220">
           <template #default="{row}">
             <button v-if="row.orderStatus === 'PENDING_PICKUP'" class="btn-sm btn-sm-primary" @click="openPickupDialog(row)">处理取车</button>
+            <button
+              v-if="row.orderStatus === 'RENTED'"
+              class="btn-sm btn-sm-outline"
+              :disabled="remindingId === row.id"
+              @click="remindReturn(row)"
+            >提醒还车</button>
             <button v-if="row.orderStatus === 'RETURN_PENDING'" class="btn-sm btn-sm-success" @click="$router.push('/admin/returns')">去确认还车</button>
             <button class="btn-sm btn-sm-ghost" @click="openDetail(row)">查看详情</button>
           </template>

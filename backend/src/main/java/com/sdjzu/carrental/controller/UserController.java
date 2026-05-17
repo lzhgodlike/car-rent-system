@@ -5,6 +5,7 @@ import com.sdjzu.carrental.common.PageResult;
 import com.sdjzu.carrental.model.entity.User;
 import com.sdjzu.carrental.model.request.UserManageRequest;
 import com.sdjzu.carrental.model.request.UserProfileRequest;
+import com.sdjzu.carrental.model.request.UserStatusRequest;
 import com.sdjzu.carrental.service.UserService;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,6 +37,7 @@ public class UserController {
         return ApiResponse.success("修改成功", null);
     }
 
+
     @GetMapping
     public ApiResponse<PageResult<User>> listUsers(@RequestParam(defaultValue = "1") int pageNum,
                                                     @RequestParam(defaultValue = "10") int pageSize,
@@ -49,6 +51,12 @@ public class UserController {
     public ApiResponse<Void> updateUser(@PathVariable Long id, @RequestBody UserManageRequest request) {
         userService.updateUser(id, request);
         return ApiResponse.success("修改成功", null);
+    }
+
+    @PutMapping("/{id}/status")
+    public ApiResponse<Void> updateUserStatus(@PathVariable Long id, @RequestBody UserStatusRequest request) {
+        userService.updateUserStatus(id, request.getStatus());
+        return ApiResponse.success("状态更新成功", null);
     }
 
     @DeleteMapping("/{id}")

@@ -63,4 +63,10 @@ public class RentOrderController {
         rentOrderService.updateStatus(id, status);
         return ApiResponse.success("状态更新成功", null);
     }
+
+    @PutMapping("/{id}/remind-return")
+    public ApiResponse<Void> remindReturn(@PathVariable Long id) {
+        rentOrderService.remindReturn(id);
+        return ApiResponse.success("提醒已发送", null);
+    }
 }

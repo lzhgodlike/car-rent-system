@@ -37,16 +37,19 @@ public class ReturnOrderService {
     private final RentOrderService rentOrderService;
     private final UserMapper userMapper;
     private final CarService carService;
+    private final MessageNoticeService messageNoticeService;
 
     public ReturnOrderService(ReturnOrderMapper returnOrderMapper, RentOrderMapper rentOrderMapper,
                               CarMapper carMapper, RentOrderService rentOrderService,
-                              UserMapper userMapper, CarService carService) {
+                              UserMapper userMapper, CarService carService,
+                              MessageNoticeService messageNoticeService) {
         this.returnOrderMapper = returnOrderMapper;
         this.rentOrderMapper = rentOrderMapper;
         this.carMapper = carMapper;
         this.rentOrderService = rentOrderService;
         this.userMapper = userMapper;
         this.carService = carService;
+        this.messageNoticeService = messageNoticeService;
     }
 
     @Transactional
@@ -88,6 +91,18 @@ public class ReturnOrderService {
 
         // 重新推导车辆状态
         rentOrderService.recalculateCarStatus(rentOrder.getCarId());
+
+        if (!SecurityUtils.isAdmin()) {
+            String displayName = resolveUserDisplayName(rentOrder.getUserId());
+            String carName = car == null ? "未知车辆" : (car.getBrand() + " " + car.getModel());
+            messageNoticeService.notifyAdmins(
+                    "还车申请提醒",
+                    displayName + " 提交了还车申请，订单号：" + rentOrder.getOrderNo() + "，车辆：" + carName,
+                    "RETURN_ORDER_CREATED",
+                    "RETURN_ORDER",
+                    returnOrder.getId()
+            );
+        }
     }
 
     public PageResult<ReturnOrder> list(int pageNum, int pageSize, String status, String keyword) {
@@ -264,5 +279,19 @@ public class ReturnOrderService {
 
         // 重新推导车辆状态
         rentOrderService.recalculateCarStatus(rentOrder.getCarId());
+    }
+
+    private String resolveUserDisplayName(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            return "用户";
+        }
+        if (StringUtils.hasText(user.getRealName())) {
+            return user.getRealName();
+        }
+        if (StringUtils.hasText(user.getUsername())) {
+            return user.getUsername();
+        }
+        return "用户";
     }
 }

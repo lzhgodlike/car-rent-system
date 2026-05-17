@@ -50,11 +50,12 @@ public class RentOrderService {
     private final FaultReportMapper faultReportMapper;
     private final UserMapper userMapper;
     private final CarService carService;
+    private final MessageNoticeService messageNoticeService;
 
     public RentOrderService(RentOrderMapper rentOrderMapper, CarMapper carMapper,
                             CarTypeMapper carTypeMapper, ReturnOrderMapper returnOrderMapper,
                             FaultReportMapper faultReportMapper, UserMapper userMapper,
-                            CarService carService) {
+                            CarService carService, MessageNoticeService messageNoticeService) {
         this.rentOrderMapper = rentOrderMapper;
         this.carMapper = carMapper;
         this.carTypeMapper = carTypeMapper;
@@ -62,6 +63,7 @@ public class RentOrderService {
         this.faultReportMapper = faultReportMapper;
         this.userMapper = userMapper;
         this.carService = carService;
+        this.messageNoticeService = messageNoticeService;
     }
 
     @Transactional
@@ -98,6 +100,17 @@ public class RentOrderService {
         rentOrderMapper.insert(rentOrder);
 
         recalculateCarStatus(request.getCarId());
+
+        if (!SecurityUtils.isAdmin()) {
+            String displayName = resolveUserDisplayName(rentOrder.getUserId());
+            messageNoticeService.notifyAdmins(
+                    "新租车订单",
+                    displayName + " 提交了租车订单 " + rentOrder.getOrderNo() + "，车辆：" + car.getBrand() + " " + car.getModel(),
+                    "RENT_ORDER_CREATED",
+                    "RENT_ORDER",
+                    rentOrder.getId()
+            );
+        }
     }
 
     /**
@@ -157,6 +170,29 @@ public class RentOrderService {
         rentOrderMapper.updateById(rentOrder);
 
         recalculateCarStatus(rentOrder.getCarId());
+    }
+
+    @Transactional
+    public void remindReturn(Long id) {
+        SecurityUtils.requireAdmin();
+        RentOrder rentOrder = rentOrderMapper.selectById(id);
+        if (rentOrder == null) {
+            throw new BusinessException("租车订单不存在");
+        }
+        if (!RENTED.equals(rentOrder.getOrderStatus())) {
+            throw new BusinessException("只有租赁中的订单才能发送还车提醒");
+        }
+        Car car = carMapper.selectById(rentOrder.getCarId());
+        String carName = car == null ? "该车辆" : (car.getBrand() + " " + car.getModel());
+        String plateNumber = car == null || !StringUtils.hasText(car.getPlateNumber()) ? "未知" : car.getPlateNumber();
+        messageNoticeService.notifyUser(
+                rentOrder.getUserId(),
+                "还车提醒",
+                "管理员提醒您尽快归还" + carName + "，车牌号为" + plateNumber,
+                "RETURN_REMINDER",
+                "RENT_ORDER",
+                rentOrder.getId()
+        );
     }
 
     public PageResult<RentOrder> list(int pageNum, int pageSize, Long carId, String status, String keyword) {
@@ -395,5 +431,19 @@ public class RentOrderService {
 
         car.setStatus(newStatus);
         carMapper.updateById(car);
+    }
+
+    private String resolveUserDisplayName(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            return "用户";
+        }
+        if (StringUtils.hasText(user.getRealName())) {
+            return user.getRealName();
+        }
+        if (StringUtils.hasText(user.getUsername())) {
+            return user.getUsername();
+        }
+        return "用户";
     }
 }

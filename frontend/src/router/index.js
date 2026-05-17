@@ -10,6 +10,7 @@ const adminRoutes = [
   { path: 'orders', name: 'AdminOrders', component: () => import('../views/admin/Orders.vue'), meta: { title: '订单管理' } },
   { path: 'returns', name: 'AdminReturns', component: () => import('../views/admin/Returns.vue'), meta: { title: '归还处理' } },
   { path: 'fault-reports', name: 'AdminFaultReports', component: () => import('../views/admin/FaultReports.vue'), meta: { title: '维保管理' } },
+  { path: 'support-conversations', name: 'AdminSupportConversations', component: () => import('../views/admin/SupportConversations.vue'), meta: { title: '客服会话' } },
   { path: 'users', name: 'AdminUsers', component: () => import('../views/admin/Users.vue'), meta: { title: '客户管理' } },
   { path: 'profile', name: 'AdminProfile', component: () => import('../views/admin/Profile.vue'), meta: { title: '个人中心' } },
 ]

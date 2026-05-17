@@ -227,4 +227,65 @@ INSERT INTO `sys_user` VALUES (1, 'admin', '21232f297a57a5a743894a0e4a801fc3', '
 INSERT INTO `sys_user` VALUES (2, 'zhangsan', 'e10adc3949ba59abbe56e057f20f883e', '张三', '13900000001', '370101200101010002', '男', 'USER', 1, '2026-03-08 23:12:23', '2026-03-08 23:12:23');
 INSERT INTO `sys_user` VALUES (3, 'lisi', 'e10adc3949ba59abbe56e057f20f883e', '李四', '13900000002', '370101200102020003', '女', 'USER', 1, '2026-03-08 23:12:23', '2026-03-08 23:12:23');
 
+-- ----------------------------
+-- Table structure for message_notice
+-- ----------------------------
+DROP TABLE IF EXISTS `message_notice`;
+CREATE TABLE `message_notice`  (
+  `id` bigint(0) NOT NULL AUTO_INCREMENT,
+  `receiver_id` bigint(0) NOT NULL,
+  `sender_id` bigint(0) NULL DEFAULT NULL,
+  `title` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `content` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `message_type` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `biz_type` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
+  `biz_id` bigint(0) NULL DEFAULT NULL,
+  `read_status` tinyint(0) NOT NULL DEFAULT 0,
+  `read_time` datetime(0) NULL DEFAULT NULL,
+  `create_time` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0),
+  `update_time` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) ON UPDATE CURRENT_TIMESTAMP(0),
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_message_notice_receiver`(`receiver_id`, `id`) USING BTREE,
+  INDEX `idx_message_notice_unread`(`receiver_id`, `read_status`, `id`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for support_conversation
+-- ----------------------------
+DROP TABLE IF EXISTS `support_conversation`;
+CREATE TABLE `support_conversation`  (
+  `id` bigint(0) NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(0) NOT NULL,
+  `status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'OPEN',
+  `assigned_admin_id` bigint(0) NULL DEFAULT NULL,
+  `source_biz_type` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
+  `source_biz_id` bigint(0) NULL DEFAULT NULL,
+  `last_message_preview` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
+  `last_message_time` datetime(0) NULL DEFAULT NULL,
+  `user_unread_count` int(0) NOT NULL DEFAULT 0,
+  `admin_unread_count` int(0) NOT NULL DEFAULT 0,
+  `create_time` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0),
+  `update_time` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) ON UPDATE CURRENT_TIMESTAMP(0),
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_support_conversation_user_status`(`user_id`, `status`) USING BTREE,
+  INDEX `idx_support_conversation_status_time`(`status`, `last_message_time`, `id`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for support_message
+-- ----------------------------
+DROP TABLE IF EXISTS `support_message`;
+CREATE TABLE `support_message`  (
+  `id` bigint(0) NOT NULL AUTO_INCREMENT,
+  `conversation_id` bigint(0) NOT NULL,
+  `sender_id` bigint(0) NOT NULL,
+  `sender_role` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `content` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `read_status` tinyint(0) NOT NULL DEFAULT 0,
+  `create_time` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0),
+  `update_time` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP(0) ON UPDATE CURRENT_TIMESTAMP(0),
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_support_message_conversation`(`conversation_id`, `id`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+
 SET FOREIGN_KEY_CHECKS = 1;

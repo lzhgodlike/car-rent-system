@@ -112,3 +112,52 @@ CREATE TABLE user_favorite (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_user_car (user_id, car_id)
 );
+
+DROP TABLE IF EXISTS message_notice;
+CREATE TABLE message_notice (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    receiver_id BIGINT NOT NULL,
+    sender_id BIGINT,
+    title VARCHAR(100) NOT NULL,
+    content VARCHAR(255) NOT NULL,
+    message_type VARCHAR(40) NOT NULL,
+    biz_type VARCHAR(40),
+    biz_id BIGINT,
+    read_status TINYINT NOT NULL DEFAULT 0,
+    read_time DATETIME,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_message_notice_receiver (receiver_id, id),
+    INDEX idx_message_notice_unread (receiver_id, read_status, id)
+);
+
+DROP TABLE IF EXISTS support_conversation;
+CREATE TABLE support_conversation (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'OPEN',
+    assigned_admin_id BIGINT,
+    source_biz_type VARCHAR(40),
+    source_biz_id BIGINT,
+    last_message_preview VARCHAR(255),
+    last_message_time DATETIME,
+    user_unread_count INT NOT NULL DEFAULT 0,
+    admin_unread_count INT NOT NULL DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_support_conversation_user_status (user_id, status),
+    INDEX idx_support_conversation_status_time (status, last_message_time, id)
+);
+
+DROP TABLE IF EXISTS support_message;
+CREATE TABLE support_message (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    conversation_id BIGINT NOT NULL,
+    sender_id BIGINT NOT NULL,
+    sender_role VARCHAR(20) NOT NULL,
+    content VARCHAR(1000) NOT NULL,
+    read_status TINYINT NOT NULL DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_support_message_conversation (conversation_id, id)
+);

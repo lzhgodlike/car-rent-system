@@ -35,16 +35,19 @@ public class FaultReportService {
     private final RentOrderService rentOrderService;
     private final UserMapper userMapper;
     private final CarService carService;
+    private final MessageNoticeService messageNoticeService;
 
     public FaultReportService(FaultReportMapper faultReportMapper, CarMapper carMapper,
                               RentOrderMapper rentOrderMapper, RentOrderService rentOrderService,
-                              UserMapper userMapper, CarService carService) {
+                              UserMapper userMapper, CarService carService,
+                              MessageNoticeService messageNoticeService) {
         this.faultReportMapper = faultReportMapper;
         this.carMapper = carMapper;
         this.rentOrderMapper = rentOrderMapper;
         this.rentOrderService = rentOrderService;
         this.userMapper = userMapper;
         this.carService = carService;
+        this.messageNoticeService = messageNoticeService;
     }
 
     @Transactional
@@ -85,6 +88,18 @@ public class FaultReportService {
 
         // 重新推导车辆状态
         rentOrderService.recalculateCarStatus(request.getCarId());
+
+        if (!SecurityUtils.isAdmin()) {
+            Car car = carMapper.selectById(request.getCarId());
+            String carName = car == null ? "未知车辆" : (car.getBrand() + " " + car.getModel());
+            messageNoticeService.notifyAdmins(
+                    "故障报修提醒",
+                    resolveUserDisplayName(SecurityUtils.getUserId()) + " 提交了故障报修，车辆：" + carName,
+                    "FAULT_REPORT_CREATED",
+                    "FAULT_REPORT",
+                    faultReport.getId()
+            );
+        }
     }
 
     public PageResult<FaultReport> list(int pageNum, int pageSize, Long carId, String status, String keyword) {
@@ -237,5 +252,19 @@ public class FaultReportService {
         faultReportMapper.updateById(faultReport);
 
         rentOrderService.recalculateCarStatus(faultReport.getCarId());
+    }
+
+    private String resolveUserDisplayName(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            return "用户";
+        }
+        if (StringUtils.hasText(user.getRealName())) {
+            return user.getRealName();
+        }
+        if (StringUtils.hasText(user.getUsername())) {
+            return user.getUsername();
+        }
+        return "用户";
     }
 }

@@ -64,6 +64,7 @@ public class UserService {
         userMapper.updateById(user);
     }
 
+
     public PageResult<User> listUsers(int pageNum, int pageSize, String role, Integer status, String keyword) {
         SecurityUtils.requireAdmin();
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<User>()
@@ -98,21 +99,9 @@ public class UserService {
             if (StringUtils.hasText(request.getRole()) && !request.getRole().equals(user.getRole())) {
                 throw new BusinessException("不能修改自己的角色");
             }
-            if (request.getStatus() != null && !request.getStatus().equals(user.getStatus())) {
-                throw new BusinessException("不能修改自己的账号状态");
-            }
         }
 
-        // 禁用管理员前检查是否是最后一个
-        if (request.getStatus() != null && request.getStatus() == 0
-                && "ADMIN".equalsIgnoreCase(user.getRole())) {
-            Long adminCount = userMapper.selectCount(new LambdaQueryWrapper<User>()
-                    .eq(User::getRole, "ADMIN")
-                    .eq(User::getStatus, 1));
-            if (adminCount != null && adminCount <= 1) {
-                throw new BusinessException("系统至少需要一个启用的管理员，无法禁用");
-            }
-        }
+        validateStatusUpdate(id, user, request.getStatus());
 
         if (StringUtils.hasText(request.getUsername())) {
             User exists = userMapper.selectOne(new LambdaQueryWrapper<User>()
@@ -134,6 +123,37 @@ public class UserService {
             user.setPassword(DigestUtils.md5DigestAsHex(request.getPassword().getBytes(StandardCharsets.UTF_8)));
         }
         userMapper.updateById(user);
+    }
+
+    public void updateUserStatus(Long id, Integer status) {
+        SecurityUtils.requireAdmin();
+        if (status == null || (status != 0 && status != 1)) {
+            throw new BusinessException("账号状态参数不正确");
+        }
+        User user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        validateStatusUpdate(id, user, status);
+        user.setStatus(status);
+        userMapper.updateById(user);
+    }
+
+    private void validateStatusUpdate(Long targetUserId, User user, Integer status) {
+        if (status == null || status.equals(user.getStatus())) {
+            return;
+        }
+        if (targetUserId.equals(SecurityUtils.getUserId())) {
+            throw new BusinessException("不能修改自己的账号状态");
+        }
+        if (status == 0 && "ADMIN".equalsIgnoreCase(user.getRole())) {
+            Long enabledAdminCount = userMapper.selectCount(new LambdaQueryWrapper<User>()
+                    .eq(User::getRole, "ADMIN")
+                    .eq(User::getStatus, 1));
+            if (enabledAdminCount != null && enabledAdminCount <= 1) {
+                throw new BusinessException("系统至少需要一个启用的管理员，无法禁用");
+            }
+        }
     }
 
     public void deleteUser(Long id) {
