@@ -150,25 +150,6 @@ const logout = () => { clearAuth(); router.replace('/home') }
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><polygon points="5,1 6.5,3.8 9.5,4.3 7.25,6.5 7.8,9.5 5,8 2.2,9.5 2.75,6.5 0.5,4.3 3.5,3.8" fill="currentColor"/></svg>
               普通会员
             </span>
-            <span class="hero-divider">·</span>
-            <span class="hero-sub">注册用户</span>
-          </div>
-        </div>
-
-        <div class="hero-stats">
-          <div class="stat-item">
-            <div class="stat-num">—</div>
-            <div class="stat-label">累计订单</div>
-          </div>
-          <div class="stat-sep"></div>
-          <div class="stat-item">
-            <div class="stat-num">—</div>
-            <div class="stat-label">累计消费</div>
-          </div>
-          <div class="stat-sep"></div>
-          <div class="stat-item">
-            <div class="stat-num gold">4.9</div>
-            <div class="stat-label">信用评分</div>
           </div>
         </div>
       </div>

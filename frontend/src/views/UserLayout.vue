@@ -577,7 +577,7 @@ onBeforeUnmount(() => {
                       :disabled="!isNoticeActionable(item)"
                       @click="goHandleMessage(item)"
                     >
-                      {{ isNoticeActionable(item) ? "去操作" : "已处理" }}
+                      {{ isNoticeActionable(item) ? "去操作" : "去操作" }}
                     </button>
                     <button
                       type="button"
