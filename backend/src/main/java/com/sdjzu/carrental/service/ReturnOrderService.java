@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -30,6 +31,10 @@ import java.util.stream.Collectors;
 
 @Service
 public class ReturnOrderService {
+
+    // 附加费用支付状态
+    public static final String EXTRA_FEE_UNPAID = "UNPAID";
+    public static final String EXTRA_FEE_PAID = "PAID";
 
     private final ReturnOrderMapper returnOrderMapper;
     private final RentOrderMapper rentOrderMapper;
@@ -279,6 +284,37 @@ public class ReturnOrderService {
 
         // 重新推导车辆状态
         rentOrderService.recalculateCarStatus(rentOrder.getCarId());
+    }
+
+    /**
+     * 支付附加费用
+     */
+    @Transactional
+    public void payExtraFee(Long returnOrderId, String paymentMethod) {
+        ReturnOrder returnOrder = returnOrderMapper.selectById(returnOrderId);
+        if (returnOrder == null) {
+            throw new BusinessException("还车记录不存在");
+        }
+        if (!"CONFIRMED".equals(returnOrder.getStatus())) {
+            throw new BusinessException("还车记录状态不允许支付");
+        }
+        if (returnOrder.getExtraFee() == null || returnOrder.getExtraFee().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("该订单没有附加费用");
+        }
+        if (EXTRA_FEE_PAID.equals(returnOrder.getExtraFeePaymentStatus())) {
+            throw new BusinessException("附加费用已支付");
+        }
+
+        RentOrder rentOrder = rentOrderMapper.selectById(returnOrder.getRentOrderId());
+        if (rentOrder == null) {
+            throw new BusinessException("关联租车订单不存在");
+        }
+        if (!SecurityUtils.isAdmin() && !rentOrder.getUserId().equals(SecurityUtils.getUserId())) {
+            throw new BusinessException("只能支付自己的订单");
+        }
+
+        returnOrder.setExtraFeePaymentStatus(EXTRA_FEE_PAID);
+        returnOrderMapper.updateById(returnOrder);
     }
 
     private String resolveUserDisplayName(Long userId) {

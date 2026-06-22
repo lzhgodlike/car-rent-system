@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/rent-orders")
 public class RentOrderController {
@@ -26,9 +28,15 @@ public class RentOrderController {
     }
 
     @PostMapping
-    public ApiResponse<Void> create(@Valid @RequestBody RentOrderRequest request) {
-        rentOrderService.create(request);
-        return ApiResponse.success("下单成功", null);
+    public ApiResponse<Long> create(@Valid @RequestBody RentOrderRequest request) {
+        Long orderId = rentOrderService.create(request);
+        return ApiResponse.success("下单成功", orderId);
+    }
+
+    @PostMapping("/{id}/pay")
+    public ApiResponse<Void> pay(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        rentOrderService.pay(id, body.get("paymentMethod"));
+        return ApiResponse.success("支付成功", null);
     }
 
     @GetMapping

@@ -26,6 +26,7 @@ import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
@@ -42,6 +43,10 @@ public class RentOrderService {
     public static final String RETURN_PENDING = "RETURN_PENDING";
     public static final String COMPLETED = "COMPLETED";
     public static final String CANCELLED = "CANCELLED";
+
+    // 支付状态常量
+    public static final String PAYMENT_UNPAID = "UNPAID";
+    public static final String PAYMENT_PAID = "PAID";
 
     private final RentOrderMapper rentOrderMapper;
     private final CarMapper carMapper;
@@ -67,7 +72,7 @@ public class RentOrderService {
     }
 
     @Transactional
-    public void create(RentOrderRequest request) {
+    public Long create(RentOrderRequest request) {
         if (!request.getExpectedReturnDate().isAfter(request.getRentDate())) {
             throw new BusinessException("预计还车日期必须晚于租车日期");
         }
@@ -96,6 +101,7 @@ public class RentOrderService {
         rentOrder.setUnitPrice(car.getDayPrice());
         rentOrder.setTotalPrice(totalPrice);
         rentOrder.setOrderStatus(PENDING_PICKUP);
+        rentOrder.setPaymentStatus(PAYMENT_UNPAID);
         rentOrder.setRemark(request.getRemark());
         rentOrderMapper.insert(rentOrder);
 
@@ -111,6 +117,28 @@ public class RentOrderService {
                     rentOrder.getId()
             );
         }
+        return rentOrder.getId();
+    }
+
+    /**
+     * 模拟支付：更新订单支付状态
+     */
+    @Transactional
+    public void pay(Long orderId, String paymentMethod) {
+        RentOrder rentOrder = rentOrderMapper.selectById(orderId);
+        if (rentOrder == null) {
+            throw new BusinessException("订单不存在");
+        }
+        if (!SecurityUtils.isAdmin() && !rentOrder.getUserId().equals(SecurityUtils.getUserId())) {
+            throw new BusinessException("只能支付自己的订单");
+        }
+        if (PAYMENT_PAID.equals(rentOrder.getPaymentStatus())) {
+            throw new BusinessException("该订单已支付");
+        }
+        rentOrder.setPaymentStatus(PAYMENT_PAID);
+        rentOrder.setPaymentMethod(paymentMethod);
+        rentOrder.setPaymentTime(LocalDateTime.now());
+        rentOrderMapper.updateById(rentOrder);
     }
 
     /**
@@ -125,6 +153,9 @@ public class RentOrderService {
         }
         if (!PENDING_PICKUP.equals(rentOrder.getOrderStatus())) {
             throw new BusinessException("当前订单状态不允许确认取车");
+        }
+        if (PAYMENT_UNPAID.equals(rentOrder.getPaymentStatus())) {
+            throw new BusinessException("订单未支付，无法确认取车");
         }
         rentOrder.setOrderStatus(RENTED);
         rentOrderMapper.updateById(rentOrder);
@@ -313,6 +344,10 @@ public class RentOrderService {
         for (RentOrder o : orders) {
             java.util.List<String> actions = new java.util.ArrayList<>();
             actions.add("view_detail");
+            // 未支付订单显示支付按钮
+            if (PAYMENT_UNPAID.equals(o.getPaymentStatus()) && !CANCELLED.equals(o.getOrderStatus())) {
+                actions.add("pay");
+            }
             switch (o.getOrderStatus()) {
                 case PENDING_PICKUP:
                     actions.add("cancel");
@@ -325,6 +360,12 @@ public class RentOrderService {
                     break;
                 case COMPLETED:
                     actions.add("repurchase");
+                    // 检查是否有未支付的附加费用
+                    if (o.getReturnOrder() != null && o.getReturnOrder().getExtraFee() != null
+                            && o.getReturnOrder().getExtraFee().compareTo(BigDecimal.ZERO) > 0
+                            && "UNPAID".equals(o.getReturnOrder().getExtraFeePaymentStatus())) {
+                        actions.add("pay_extra_fee");
+                    }
                     if (o.getActualReturnDate() != null) {
                         long days = java.time.temporal.ChronoUnit.DAYS.between(o.getActualReturnDate(), today);
                         if (days <= 7) actions.add("report_fault");

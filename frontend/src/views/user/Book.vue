@@ -73,6 +73,13 @@ const profileTipVisible = ref(false)
 let toastTimer = null
 let scrollTimer = null
 
+// 支付相关
+const paymentVisible = ref(false)
+const paymentMethod = ref('ALIPAY')
+const paying = ref(false)
+const paymentSuccess = ref(false)
+const currentOrderId = ref(null)
+
 // 详情弹窗 & 图片放大
 const detailVisible = ref(false)
 const detailCar = ref(null)
@@ -297,9 +304,48 @@ const submitRent = async () => {
     }
   } catch { return }
 
-  await request.post('/rent-orders', { carId: selectedCar.value.id, ...rentForm.value })
-  ElMessage.success('预订成功！')
-  selectedCar.value = null; loadData(true)
+  // 先创建订单
+  try {
+    const orderId = await request.post('/rent-orders', {
+      carId: selectedCar.value.id,
+      ...rentForm.value
+    })
+    currentOrderId.value = orderId
+
+    // 打开支付弹窗
+    paymentMethod.value = 'ALIPAY'
+    paying.value = false
+    paymentSuccess.value = false
+    paymentVisible.value = true
+  } catch (e) {
+    ElMessage.error('创建订单失败，请重试')
+  }
+}
+
+const confirmPayment = async () => {
+  paying.value = true
+  try {
+    // 模拟支付延迟
+    await new Promise(resolve => setTimeout(resolve, 1500))
+
+    await request.post(`/rent-orders/${currentOrderId.value}/pay`, {
+      paymentMethod: paymentMethod.value
+    })
+
+    paymentSuccess.value = true
+    setTimeout(() => {
+      paymentVisible.value = false
+      paymentSuccess.value = false
+      ElMessage.success('支付成功，预订完成！')
+      selectedCar.value = null
+      currentOrderId.value = null
+      loadData(true)
+    }, 1200)
+  } catch {
+    ElMessage.error('支付失败，请重试')
+  } finally {
+    paying.value = false
+  }
 }
 </script>
 
@@ -345,7 +391,7 @@ const submitRent = async () => {
             </div>
             <div class="car-body">
               <div class="car-name">{{ car.brand }} {{ car.model }}</div>
-              <div class="car-meta">{{ car.plateNumber }} · {{ (car.mileage / 10000).toFixed(1) }}万km</div>
+              <div class="car-meta">{{ car.plateNumber }} · {{ car.mileage }}km</div>
               <div class="car-features">
                 <div class="car-feat"><el-icon><User /></el-icon> 5座</div>
                 <div class="car-feat"><el-icon><OfficeBuilding /></el-icon> {{ carTypeName(car.typeId) }}</div>
@@ -431,6 +477,94 @@ const submitRent = async () => {
       </div>
     </div>
 
+    <!-- 支付弹窗 -->
+    <div v-if="paymentVisible" class="payment-overlay" @click.self="paying ? null : paymentVisible = false">
+      <div class="payment-modal">
+        <!-- 支付成功状态 -->
+        <div v-if="paymentSuccess" class="payment-success">
+          <div class="success-icon">
+            <svg viewBox="0 0 52 52" class="success-svg">
+              <circle cx="26" cy="26" r="25" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M14 27l8 8 16-16"/>
+            </svg>
+          </div>
+          <div class="success-text">支付成功</div>
+          <div class="success-sub">订单已创建，等待确认取车</div>
+        </div>
+
+        <!-- 支付表单 -->
+        <template v-else>
+          <div class="payment-header">
+            <div class="payment-title">确认支付</div>
+            <button class="payment-close" @click="paymentVisible = false" :disabled="paying">
+              <el-icon><Close /></el-icon>
+            </button>
+          </div>
+          <div class="payment-body">
+            <!-- 订单信息 -->
+            <div class="payment-order-info">
+              <div class="payment-car-name">{{ selectedCar?.brand }} {{ selectedCar?.model }}</div>
+              <div class="payment-car-meta">{{ selectedCar?.plateNumber }} · {{ carTypeName(selectedCar?.typeId) }}</div>
+              <div class="payment-date-range">
+                {{ rentForm.rentDate }} 至 {{ rentForm.expectedReturnDate }} · {{ days }}天
+              </div>
+            </div>
+
+            <!-- 支付金额 -->
+            <div class="payment-amount">
+              <span class="payment-amount-label">支付金额</span>
+              <span class="payment-amount-value">¥{{ totalPrice.toLocaleString() }}</span>
+            </div>
+
+            <!-- 支付方式 -->
+            <div class="payment-methods">
+              <div class="payment-methods-title">选择支付方式</div>
+              <div
+                class="payment-method"
+                :class="{ active: paymentMethod === 'ALIPAY' }"
+                @click="paymentMethod = 'ALIPAY'"
+              >
+                <div class="payment-method-icon alipay-icon">
+                  <svg viewBox="0 0 24 24" width="24" height="24"><path fill="#1677FF" d="M21.422 14.763c-1.323-.588-2.757-1.269-4.269-2.032a28.5 28.5 0 0 0 1.447-4.436h-4.09V6.613h5.078V5.39h-5.078V2.735h-2.16c-.2 0-.363.063-.363.063s-.05.117-.05.332v2.26H6.85v1.223h4.087v1.682H5.39v1.223h9.196a26 26 0 0 1-1.066 3.365c-2.452-1.076-5.27-2.155-8.026-2.155C1.494 13.526 0 15.486 0 17.37c0 2.233 1.978 3.63 4.418 3.63 3.415 0 6.378-2.529 8.463-5.078 2.541 1.35 5.925 3.066 8.541 3.84V14.763ZM4.418 19.32c-1.48 0-2.755-.757-2.755-1.95 0-1.194 1.276-1.951 2.755-1.951 2.337 0 4.514 1.58 6.007 3.062-1.163.565-2.655.839-4.007.839-1.04 0-1.612-.23-2-.839Z"/></svg>
+                </div>
+                <span>支付宝</span>
+                <div class="payment-method-check">
+                  <svg v-if="paymentMethod === 'ALIPAY'" viewBox="0 0 24 24" width="20" height="20"><path fill="var(--accent)" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+                </div>
+              </div>
+              <div
+                class="payment-method"
+                :class="{ active: paymentMethod === 'WECHAT' }"
+                @click="paymentMethod = 'WECHAT'"
+              >
+                <div class="payment-method-icon wechat-icon">
+                  <svg viewBox="0 0 24 24" width="24" height="24"><path fill="#07C160" d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348ZM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18Zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18Zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 0 1 .598.082l1.584.926a.272.272 0 0 0 .14.045c.134 0 .24-.11.24-.245 0-.06-.024-.12-.04-.178l-.325-1.233a.492.492 0 0 1 .177-.554C23.026 18.582 24 16.89 24 14.978c0-3.33-2.776-5.998-7.062-6.12ZM14.033 13.3c.535 0 .969.44.969.983a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.983.97-.983Zm4.844 0c.535 0 .969.44.969.983a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.983.97-.983Z"/></svg>
+                </div>
+                <span>微信支付</span>
+                <div class="payment-method-check">
+                  <svg v-if="paymentMethod === 'WECHAT'" viewBox="0 0 24 24" width="20" height="20"><path fill="var(--accent)" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- 支付按钮 -->
+            <button
+              class="btn-pay"
+              @click="confirmPayment"
+              :disabled="paying"
+            >
+              <span v-if="paying" class="paying-spinner"></span>
+              {{ paying ? '支付处理中...' : `确认支付 ¥${totalPrice.toLocaleString()}` }}
+            </button>
+
+            <p class="payment-note">
+              <el-icon><Lock /></el-icon> 模拟支付环境 · 不会产生真实扣款
+            </p>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- 车辆详情弹窗 -->
     <div v-if="detailVisible" class="detail-overlay" @click.self="detailVisible = false">
       <div class="detail-modal">
@@ -469,16 +603,14 @@ const submitRent = async () => {
               <div style="font-size:12px;color:var(--muted);">每日租金</div>
               <div class="detail-price">¥{{ detailCar.dayPrice }}/天</div>
             </div>
-            <div style="font-size:12px;color:var(--muted);text-align:right;">里程 {{ (detailCar.mileage / 10000).toFixed(1) }}万km<br>{{ detailCar.plateNumber }}</div>
+            <div style="font-size:12px;color:var(--muted);text-align:right;">里程 {{ detailCar.mileage }}km<br>{{ detailCar.plateNumber }}</div>
           </div>
           <div class="detail-rows">
-            <div class="detail-row"><span class="detail-label">车辆编号</span><span class="detail-val">{{ detailCar.carNo }}</span></div>
             <div class="detail-row"><span class="detail-label">车牌号</span><span class="detail-val">{{ detailCar.plateNumber }}</span></div>
             <div class="detail-row"><span class="detail-label">品牌型号</span><span class="detail-val">{{ detailCar.brand }} {{ detailCar.model }}</span></div>
             <div class="detail-row"><span class="detail-label">车型分类</span><span class="detail-val">{{ carTypeName(detailCar.typeId) }}</span></div>
             <div class="detail-row"><span class="detail-label">总里程数</span><span class="detail-val">{{ detailCar.mileage?.toLocaleString() }} km</span></div>
             <div class="detail-row"><span class="detail-label">取车地址</span><span class="detail-val">{{ detailCar.pickupAddress || '待补充' }}</span></div>
-            <div class="detail-row"><span class="detail-label">车辆状态</span><span class="detail-val">{{ detailCar.status === 'AVAILABLE' ? '可用' : detailCar.status }}</span></div>
           </div>
           <button class="detail-book-btn" @click="detailVisible = false; selectCar(detailCar)">
             <el-icon><Check /></el-icon> 选择该车辆
@@ -887,6 +1019,97 @@ const submitRent = async () => {
 
 .back-top-enter-active, .back-top-leave-active { transition: opacity .3s, transform .3s cubic-bezier(.4,0,.2,1); }
 .back-top-enter-from, .back-top-leave-to { opacity: 0; transform: translateX(-50%) translateY(16px); }
+
+/* 支付弹窗 */
+.payment-overlay {
+  position: fixed; inset: 0; z-index: 250;
+  background: rgba(0,0,0,0.55); display: flex;
+  align-items: center; justify-content: center;
+  animation: fadeIn .2s ease;
+}
+.payment-modal {
+  background: var(--white); border-radius: 20px;
+  width: 420px; box-shadow: var(--shadow-lg); animation: modalIn .25s ease;
+  overflow: hidden;
+}
+.payment-header {
+  padding: 20px 24px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.payment-title { font-weight: 700; font-size: 18px; }
+.payment-close { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 20px; padding: 4px; transition: color .15s; }
+.payment-close:hover { color: var(--text); }
+.payment-close:disabled { opacity: .5; cursor: not-allowed; }
+.payment-body { padding: 24px; }
+
+.payment-order-info {
+  background: var(--bg); border-radius: 12px; padding: 16px; margin-bottom: 20px;
+}
+.payment-car-name { font-size: 16px; font-weight: 600; }
+.payment-car-meta { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.payment-date-range { font-size: 13px; color: var(--muted); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+
+.payment-amount {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px; background: var(--accent-light); border-radius: 12px; margin-bottom: 20px;
+}
+.payment-amount-label { font-size: 14px; color: var(--muted); }
+.payment-amount-value { font-family: 'Bebas Neue', monospace; font-size: 28px; font-weight: 500; color: var(--accent); }
+
+.payment-methods { margin-bottom: 20px; }
+.payment-methods-title { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.payment-method {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; border: 2px solid var(--border); border-radius: 12px;
+  cursor: pointer; transition: all .15s; margin-bottom: 8px;
+}
+.payment-method:hover { border-color: var(--accent); }
+.payment-method.active { border-color: var(--accent); background: var(--accent-light); }
+.payment-method-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.alipay-icon { background: #e8f4ff; }
+.wechat-icon { background: #e8f8ee; }
+.payment-method span { flex: 1; font-size: 14px; font-weight: 500; }
+.payment-method-check { width: 20px; height: 20px; }
+
+.btn-pay {
+  width: 100%; padding: 14px; background: var(--accent); color: #fff;
+  border: none; border-radius: 12px; font-size: 16px; font-weight: 600;
+  font-family: 'Noto Sans SC', sans-serif; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background .18s; box-shadow: 0 4px 16px rgba(200,56,42,0.25);
+}
+.btn-pay:hover { background: #b02e22; }
+.btn-pay:disabled { opacity: .7; cursor: not-allowed; }
+
+.paying-spinner {
+  width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff; border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.payment-note {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  font-size: 12px; color: var(--muted); margin-top: 12px;
+}
+.payment-note .el-icon { font-size: 12px; }
+
+/* 支付成功 */
+.payment-success {
+  padding: 48px 24px; text-align: center;
+}
+.success-icon { margin-bottom: 20px; }
+.success-svg {
+  width: 64px; height: 64px; color: #22c55e;
+  animation: successPop .4s ease;
+}
+.success-svg circle { stroke-dasharray: 157; stroke-dashoffset: 157; animation: circleIn .5s .1s ease forwards; }
+.success-svg path { stroke-dasharray: 48; stroke-dashoffset: 48; animation: checkIn .3s .5s ease forwards; }
+@keyframes successPop { 0% { transform: scale(0); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+@keyframes circleIn { to { stroke-dashoffset: 0; } }
+@keyframes checkIn { to { stroke-dashoffset: 0; } }
+.success-text { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.success-sub { font-size: 14px; color: var(--muted); }
 
 /* 图片放大 */
 .zoom-overlay {

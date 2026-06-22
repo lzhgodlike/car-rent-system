@@ -148,15 +148,6 @@ const closeMessageBanner = () => {
   bannerNotice.value = null;
 };
 
-const openMessageList = async () => {
-  clearBannerSwitchTimer();
-  if (!isLoggedIn.value) return;
-  await loadMessages();
-  await nextTick();
-  messagePopoverVisible.value = true;
-  bannerNotice.value = null;
-};
-
 const isNoticeActionable = (item) => item?.actionable !== false;
 
 const goHandleMessageBanner = async () => {

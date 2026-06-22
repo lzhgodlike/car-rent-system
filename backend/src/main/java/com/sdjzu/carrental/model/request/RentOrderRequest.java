@@ -20,4 +20,6 @@ public class RentOrderRequest {
     private LocalDate expectedReturnDate;
 
     private String remark;
+
+    private String paymentMethod;
 }

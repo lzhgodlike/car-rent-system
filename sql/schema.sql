@@ -46,7 +46,7 @@ CREATE TABLE car_info (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-DROP TABLE IF EXISTS rent_order;
+DROP TABLE IF EXISTS car_image;
 CREATE TABLE car_image (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     car_id BIGINT NOT NULL,
@@ -59,6 +59,7 @@ CREATE TABLE car_image (
     INDEX idx_car_image_car_id_sort (car_id, sort_order, id)
 );
 
+DROP TABLE IF EXISTS rent_order;
 CREATE TABLE rent_order (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     order_no VARCHAR(50) NOT NULL UNIQUE,
@@ -71,6 +72,9 @@ CREATE TABLE rent_order (
     unit_price DECIMAL(10,2) NOT NULL,
     total_price DECIMAL(10,2) NOT NULL,
     order_status VARCHAR(20) NOT NULL DEFAULT 'PENDING_PICKUP',
+    payment_status VARCHAR(20) NOT NULL DEFAULT 'UNPAID',
+    payment_method VARCHAR(20),
+    payment_time DATETIME,
     remark VARCHAR(255),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -84,6 +88,7 @@ CREATE TABLE return_order (
     actual_mileage INT NOT NULL,
     damage_desc VARCHAR(255),
     extra_fee DECIMAL(10,2) DEFAULT 0.00,
+    extra_fee_payment_status VARCHAR(20) NOT NULL DEFAULT 'UNPAID',
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     operator_id BIGINT,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,

@@ -10,3 +10,4 @@ frontend/dist/
 *.iml
 .claudeignore
 todo.txt
+docs/

@@ -32,11 +32,13 @@ public class WebSocketAuthHandshakeInterceptor implements HandshakeInterceptor {
             return false;
         }
         try {
+            // 解析 Token，获取用户信息
             Claims claims = jwtUtil.parseToken(token);
             LoginUser loginUser = new LoginUser();
             loginUser.setUserId(Long.valueOf(claims.get("userId").toString()));
             loginUser.setUsername(claims.get("username").toString());
             loginUser.setRole(claims.get("role").toString());
+            // 把用户信息存到 WebSocket session 属性里
             attributes.put("loginUser", loginUser);
             return true;
         } catch (Exception ex) {
@@ -50,6 +52,7 @@ public class WebSocketAuthHandshakeInterceptor implements HandshakeInterceptor {
                                WebSocketHandler wsHandler, Exception exception) {
     }
 
+    //从请求中提取 Token（两种方式）
     private String resolveToken(ServerHttpRequest request) {
         String authorization = request.getHeaders().getFirst("Authorization");
         if (StringUtils.hasText(authorization) && authorization.startsWith("Bearer ")) {

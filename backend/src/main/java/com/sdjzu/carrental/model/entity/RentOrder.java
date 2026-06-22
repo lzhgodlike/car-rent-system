@@ -28,6 +28,9 @@ public class RentOrder {
     private BigDecimal unitPrice;
     private BigDecimal totalPrice;
     private String orderStatus;
+    private String paymentStatus;
+    private String paymentMethod;
+    private LocalDateTime paymentTime;
     private String remark;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

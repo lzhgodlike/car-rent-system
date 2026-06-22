@@ -23,6 +23,8 @@ const remindingId = ref(null)
 
 const statusMap = { PENDING_PICKUP: '待取车', RENTED: '租赁中', RETURN_PENDING: '待确认还车', COMPLETED: '已完成', CANCELLED: '已取消' }
 const statusClass = { PENDING_PICKUP: 'status-pending', RENTED: 'status-rented', RETURN_PENDING: 'status-return-pending', COMPLETED: 'status-completed', CANCELLED: 'status-cancelled' }
+const paymentStatusMap = { UNPAID: '未支付', PAID: '已支付' }
+const paymentStatusClass = { UNPAID: 'payment-unpaid', PAID: 'payment-paid' }
 const carStatusMap = { AVAILABLE: '空闲', RESERVED: '已预订', RENTED: '租赁中', AWAITING_REPAIR: '待维修', REPAIRING: '维修中', DISABLED: '停用' }
 const returnStatusMap = { PENDING: '待确认', CONFIRMED: '已确认' }
 const fmt = (v) => v ? String(v).replace('T', ' ') : '-'
@@ -116,9 +118,15 @@ const remindReturn = async (row) => {
         <el-table-column label="状态" width="120">
           <template #default="{row}"><span class="status-badge" :class="statusClass[row.orderStatus]">{{ statusMap[row.orderStatus] || row.orderStatus }}</span></template>
         </el-table-column>
+        <el-table-column label="支付状态" width="100">
+          <template #default="{row}"><span class="payment-badge" :class="paymentStatusClass[row.paymentStatus]">{{ paymentStatusMap[row.paymentStatus] || row.paymentStatus }}</span></template>
+        </el-table-column>
         <el-table-column label="操作" width="220">
           <template #default="{row}">
-            <button v-if="row.orderStatus === 'PENDING_PICKUP'" class="btn-sm btn-sm-primary" @click="openPickupDialog(row)">处理取车</button>
+            <el-tooltip v-if="row.orderStatus === 'PENDING_PICKUP' && row.paymentStatus === 'UNPAID'" content="订单未支付，无法处理取车" placement="top">
+              <button class="btn-sm btn-sm-primary" disabled>处理取车</button>
+            </el-tooltip>
+            <button v-else-if="row.orderStatus === 'PENDING_PICKUP'" class="btn-sm btn-sm-primary" @click="openPickupDialog(row)">处理取车</button>
             <button
               v-if="row.orderStatus === 'RENTED'"
               class="btn-sm btn-sm-outline"
@@ -238,6 +246,17 @@ const remindReturn = async (row) => {
 .pagination-wrap { display: flex; justify-content: flex-end; padding: 16px; }
 .car-cell-name { font-weight: 500; font-size: 13px; }
 .car-cell-plate { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.payment-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 500;
+}
+.payment-badge::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: currentColor;
+}
+.payment-unpaid { background: rgba(234,179,8,0.12); color: #b45309; }
+.payment-paid { background: rgba(58,158,110,0.12); color: var(--success); }
 :deep(.el-input--small) { --el-input-bg-color: var(--surface2); --el-input-border-color: var(--border); --el-input-hover-border-color: var(--accent); --el-input-focus-border-color: var(--accent); }
 :deep(.el-select--small) { --el-select-input-bg-color: var(--surface2); --el-select-border-color: var(--border); }
 

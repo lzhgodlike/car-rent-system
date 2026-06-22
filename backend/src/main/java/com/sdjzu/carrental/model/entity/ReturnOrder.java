@@ -22,6 +22,7 @@ public class ReturnOrder {
     private Integer actualMileage;
     private String damageDesc;
     private BigDecimal extraFee;
+    private String extraFeePaymentStatus;
     private String status;
     private Long operatorId;
     private LocalDateTime createTime;

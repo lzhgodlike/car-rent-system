@@ -146,7 +146,7 @@ const openImageZoom = () => {
 
 <template>
   <div class="home-page">
-    <!-- Hero -->
+    <!-- 首页 -->
     <section class="hero">
       <div class="hero-bg"></div>
       <div class="hero-label"><div class="hero-label-dot"></div>{{ totalCount }}辆车辆 · 即时可用</div>
@@ -165,7 +165,7 @@ const openImageZoom = () => {
       </div>
     </section>
 
-    <!-- Search -->
+    <!--筛选框 -->
     <section class="search-section">
       <div class="search-box">
         <div class="search-field">
@@ -196,7 +196,7 @@ const openImageZoom = () => {
       </div>
     </section>
 
-    <!-- Hot rentals -->
+    <!-- 近期热租 -->
     <section class="section">
       <div class="section-header">
         <h2 class="section-title">近期热租</h2>
@@ -214,7 +214,7 @@ const openImageZoom = () => {
           </div>
           <div class="car-body">
             <div class="car-name">{{ car.brand }} {{ car.model }}</div>
-            <div class="car-meta">{{ car.plateNumber }} · {{ (car.mileage / 10000).toFixed(1) }}万km</div>
+            <div class="car-meta">{{ car.plateNumber }} · {{ car.mileage }}km</div>
             <div class="car-features">
               <div class="car-feat"><el-icon><User /></el-icon> 5座</div>
               <div class="car-feat"><el-icon><OfficeBuilding /></el-icon> {{ carTypeName(car.typeId) }}</div>
@@ -237,21 +237,7 @@ const openImageZoom = () => {
       </button>
     </Transition>
 
-    <!-- Footer -->
-    <footer class="site-footer">
-      <div class="footer-grid">
-        <div>
-          <div class="footer-logo">驰云租车</div>
-          <div class="footer-desc">专注优质出行体验，提供全品类车型租赁服务，让每一段旅程都充满驾驭乐趣。</div>
-        </div>
-        <div class="footer-col"><h4>快速导航</h4><ul><li @click="router.push('/book')">找车租车</li><li @click="router.push('/my-orders')">我的订单</li><li @click="router.push('/my-profile')">个人中心</li><li>优惠活动</li></ul></div>
-        <div class="footer-col"><h4>服务支持</h4><ul><li>使用指南</li><li>常见问题</li><li>联系客服</li><li>投诉建议</li></ul></div>
-        <div class="footer-col"><h4>关于我们</h4><ul><li>公司介绍</li><li>加入我们</li><li>合作加盟</li><li>隐私政策</li></ul></div>
-      </div>
-      <div class="footer-bottom">© 2026 驰云租车 · 豫ICP备XXXXXXXX号</div>
-    </footer>
-
-    <!-- Car Detail Modal -->
+    <!-- 车辆详情弹窗 -->
     <div v-if="detailVisible" class="detail-overlay" @click.self="detailVisible = false">
       <div class="detail-modal">
         <div class="detail-header">
@@ -288,16 +274,14 @@ const openImageZoom = () => {
               <div style="font-size:12px;color:var(--muted);">每日租金</div>
               <div class="detail-price">¥{{ detailCar.dayPrice }}/天</div>
             </div>
-            <div style="font-size:12px;color:var(--muted);text-align:right;">里程 {{ (detailCar.mileage / 10000).toFixed(1) }}万km<br>{{ detailCar.plateNumber }}</div>
+            <div style="font-size:12px;color:var(--muted);text-align:right;">里程 {{ detailCar.mileage }}km<br>{{ detailCar.plateNumber }}</div>
           </div>
           <div class="detail-rows">
-            <div class="detail-row"><span class="detail-label">车辆编号</span><span class="detail-val">{{ detailCar.carNo }}</span></div>
             <div class="detail-row"><span class="detail-label">车牌号</span><span class="detail-val">{{ detailCar.plateNumber }}</span></div>
             <div class="detail-row"><span class="detail-label">品牌型号</span><span class="detail-val">{{ detailCar.brand }} {{ detailCar.model }}</span></div>
             <div class="detail-row"><span class="detail-label">车型分类</span><span class="detail-val">{{ carTypeName(detailCar.typeId) }}</span></div>
             <div class="detail-row"><span class="detail-label">总里程数</span><span class="detail-val">{{ detailCar.mileage?.toLocaleString() }} km</span></div>
             <div class="detail-row"><span class="detail-label">取车地址</span><span class="detail-val">{{ detailCar.pickupAddress || '待补充' }}</span></div>
-            <div class="detail-row"><span class="detail-label">车辆状态</span><span class="detail-val">{{ detailCar.status === 'AVAILABLE' ? '可用' : detailCar.status }}</span></div>
           </div>
           <button class="detail-book-btn" @click="detailVisible=false;router.push({ path: '/book', query: { carId: detailCar.id } })">
             <el-icon><Check /></el-icon> 立即预订
@@ -523,17 +507,6 @@ const openImageZoom = () => {
 .back-to-top:active { transform: translateX(-50%) scale(0.95); background: rgba(255,255,255,0.45); transition-duration: .1s; }
 .back-top-enter-active, .back-top-leave-active { transition: opacity .3s, transform .3s cubic-bezier(.4,0,.2,1); }
 .back-top-enter-from, .back-top-leave-to { opacity: 0; transform: translateX(-50%) translateY(16px); }
-
-/* Footer */
-.site-footer { background: #1a1a1a; color: rgba(255,255,255,0.5); padding: 48px 40px 32px; margin-top: 40px; }
-.footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; max-width: 1120px; margin: 0 auto 40px; }
-.footer-logo { font-family: 'Playfair Display', serif; font-size: 22px; color: #fff; margin-bottom: 12px; }
-.footer-desc { font-size: 13px; line-height: 1.7; }
-.footer-col h4 { color: #fff; font-size: 13px; font-weight: 500; margin-bottom: 14px; }
-.footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.footer-col ul li { font-size: 13px; cursor: pointer; transition: color .15s; }
-.footer-col ul li:hover { color: rgba(255,255,255,0.8); }
-.footer-bottom { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 24px; text-align: center; font-size: 12px; max-width: 1120px; margin: 0 auto; }
 
 /* Detail modal */
 .detail-overlay {
